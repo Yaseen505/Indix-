@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INDIX Working V1</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}
+body{background:#071120;color:#f8fafc}
+button{cursor:pointer}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at top,#1c477d,#071120 60%)}
+.login-card{width:92%;max-width:500px;background:#0f1f35;border:1px solid #36577f;border-radius:28px;padding:34px;box-shadow:0 25px 80px #0009}
+.logo{font-size:58px;font-weight:900;text-align:center;color:#f7c948}
+.sub{text-align:center;color:#b8c7dc;margin:12px 0 26px;line-height:1.5}
+input,select,textarea{width:100%;padding:13px;margin:7px 0;border-radius:13px;border:1px solid #36577f;background:#081729;color:#fff;font-size:15px}
+textarea{min-height:90px}
+.btn{border:0;border-radius:13px;background:#f7c948;color:#111;font-weight:900;padding:13px 16px;font-size:15px}
+.btn-full{width:100%;margin-top:10px}
+.app{display:none;min-height:100vh}
+.top{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;background:#0d1c30;border-bottom:1px solid #29466e;position:sticky;top:0;z-index:10}
+.top h1{color:#f7c948}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 66px)}
+.side{background:#0b1829;padding:18px;border-left:1px solid #29466e}
+.nav button{display:block;width:100%;text-align:right;margin:8px 0;padding:13px;border-radius:14px;border:1px solid #29466e;background:#10243b;color:#fff;font-weight:700}
+.nav button.active,.nav button:hover{background:#f7c948;color:#111}
+.main{padding:24px;max-width:1450px}
+h2{font-size:28px;margin-bottom:8px}.muted{color:#b8c7dc;line-height:1.6}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:18px 0}
+.card{background:#10243b;border:1px solid #29466e;border-radius:20px;padding:18px;box-shadow:0 10px 30px #0003}
+.card h3{color:#f7c948;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0;padding:14px;border-radius:15px;background:#0b1829;border:1px solid #29466e}
+.green{color:#44d07b}.yellow{color:#f7c948}.red{color:#ff5c5c}.blue{color:#4aa3ff}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.small{padding:10px 12px;border-radius:12px;border:1px solid #36577f;background:#132943;color:#fff}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{border-bottom:1px solid #29466e;padding:12px;text-align:right}
+.table th{color:#f7c948;background:#0b1829}
+.plan{height:540px;background:#020711;border:1px solid #29466e;border-radius:22px;position:relative;overflow:hidden;margin-top:16px;background-image:linear-gradient(135deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:18px 18px}
+.road{position:absolute;background:#7b42ff;height:72px;width:82%;top:245px;right:8%;transform:rotate(-20deg);border:6px solid #ff3fd4;border-radius:20px}
+.sidewalk{position:absolute;background:#44d07b55;height:115px;width:50%;top:260px;right:10%;transform:rotate(-20deg);border:2px dashed #44d07b}
+.line{position:absolute;height:10px;border-radius:20px}.done{background:#44d07b}.issue{background:#ff4545}.material{background:#4aa3ff}.pending{background:#888}
+.pole{position:absolute;width:31px;height:31px;border-radius:50%;background:#f7c948;border:3px solid #fff;box-shadow:0 0 20px #f7c94899}
+.popup{position:absolute;background:#10243bee;border:1px solid #f7c948;border-radius:16px;padding:14px;width:280px;left:22px;top:22px;line-height:1.5}
+.badge{display:inline-block;padding:6px 10px;border-radius:22px;background:#1a3555;font-size:13px;margin:3px}
+.modal{display:none;position:fixed;inset:0;background:#0009;z-index:20;align-items:center;justify-content:center}
+.modal-box{width:92%;max-width:560px;background:#0f1f35;border:1px solid #36577f;border-radius:24px;padding:24px}
+.close{float:left;background:#ff5c5c;color:#fff;border:0;border-radius:9px;padding:8px 10px}
+.notice{padding:12px 14px;background:#0b1829;border:1px solid #36577f;border-radius:14px;margin:10px 0}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.side{border-left:0}.top{align-items:flex-start;gap:8px;flex-direction:column}.plan{height:470px}.row{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+
+<section id="login" class="login">
+  <div class="login-card">
+    <div class="logo">INDIX</div>
+    <div class="sub">מערכת עובדת ראשונה לניהול פרויקטים, תוכניות, מחסן, עובדים ודיווחי שטח</div>
+    <input id="company" value="צ.ב הנדסת מערכות" placeholder="שם חברה">
+    <input value="owner@indix.co.il" placeholder="אימייל">
+    <input type="password" value="123456" placeholder="סיסמה">
+    <select id="role"><option>בעלים</option><option>מהנדס</option><option>מנהל עבודה</option><option>עובד</option><option>מחסנאי</option></select>
+    <button class="btn btn-full" onclick="openApp()">כניסה למערכת</button>
+  </div>
+</section>
+
+<section id="app" class="app">
+  <div class="top">
+    <h1>INDIX Working V1</h1>
+    <div><span id="companyName">צ.ב הנדסת מערכות</span> · מחובר כ־ <b id="userRole">בעלים</b></div>
+  </div>
+
+  <div class="layout">
+    <aside class="side">
+      <div class="nav">
+        <button class="active" onclick="show('dashboard',this)">📊 דשבורד</button>
+        <button onclick="show('projects',this)">📁 פרויקטים</button>
+        <button onclick="show('plans',this)">📐 תוכניות DWG/PDF</button>
+        <button onclick="show('inventory',this)">📦 מחסן</button>
+        <button onclick="show('workers',this)">👷 עובדים</button>
+        <button onclick="show('assets',this)">💡 נכסים</button>
+        <button onclick="show('reports',this)">📋 דיווחים</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="dashboard" class="page">
+        <h2>דשבורד ראשי</h2>
+        <p class="muted">כאן בעל החברה רואה את כל מצב החברה במקום אחד.</p>
+        <div class="grid">
+          <div class="card"><h3 id="projectCount">4</h3><p>פרויקטים</p></div>
+          <div class="card"><h3 id="workerCount">4</h3><p>עובדים</p></div>
+          <div class="card"><h3 id="inventoryCount">4</h3><p>סוגי חומרים</p></div>
+          <div class="card"><h3 id="reportCount">4</h3><p>דיווחי שטח</p></div>
+        </div>
+        <div class="card">
+          <h3>התראות אחרונות</h3>
+          <div id="alerts"></div>
+        </div>
+      </div>
+
+      <div id="projects" class="page" style="display:none">
+        <h2>ניהול פרויקטים</h2>
+        <div class="actions"><button class="btn" onclick="openModal('projectModal')">+ הוסף פרויקט</button></div>
+        <div id="projectList"></div>
+      </div>
+
+      <div id="plans" class="page" style="display:none">
+        <h2>תוכניות חכמות DWG / PDF</h2>
+        <p class="muted">דמו של סימון על תוכנית: ירוק בוצע, אדום תקלה, כחול מחכה לחומר.</p>
+        <div class="actions">
+          <button class="small" onclick="alert('בגרסה הבאה נחבר העלאת קובץ PDF/DWG אמיתית')">⬆️ העלאת תוכנית</button>
+          <button class="small" onclick="openModal('reportModal')">✍️ דיווח על נקודה</button>
+        </div>
+        <div class="plan">
+          <div class="sidewalk"></div><div class="road"></div>
+          <div class="line done" style="width:245px;top:155px;right:90px;transform:rotate(-25deg)"></div>
+          <div class="line done" style="width:185px;top:250px;right:315px;transform:rotate(-25deg)"></div>
+          <div class="line issue" style="width:150px;top:338px;right:500px;transform:rotate(-25deg)"></div>
+          <div class="line material" style="width:135px;top:108px;right:540px;transform:rotate(-25deg)"></div>
+          <div class="pole" style="top:125px;right:180px"></div>
+          <div class="pole" style="top:218px;right:360px"></div>
+          <div class="pole" style="top:310px;right:555px"></div>
+          <div class="popup"><b>חציה 3</b><br><br>סטטוס: <span class="red">לא בוצע</span><br>סיבה: קו מים מתחת לנקודת החפירה<br>עובד: אחמד<br>נשלחה התראה למהנדס<br><br><span class="badge">📷 תמונה</span><span class="badge">📍 GPS</span><span class="badge">✍️ הערה</span></div>
+        </div>
+      </div>
+
+      <div id="inventory" class="page" style="display:none">
+        <h2>מחסן</h2>
+        <div class="actions">
+          <button class="btn" onclick="openModal('itemModal')">+ הוסף חומר</button>
+          <button class="small" onclick="openModal('movementModal')">יציאה / החזרה</button>
+        </div>
+        <div id="inventoryList" class="grid"></div>
+        <table class="table"><thead><tr><th>תאריך</th><th>חומר</th><th>פעולה</th><th>כמות</th><th>פרויקט</th><th>חתימה</th></tr></thead><tbody id="movementList"></tbody></table>
+      </div>
+
+      <div id="workers" class="page" style="display:none">
+        <h2>עובדים והרשאות</h2>
+        <div class="actions"><button class="btn" onclick="openModal('workerModal')">+ הוסף עובד</button></div>
+        <div id="workerList"></div>
+      </div>
+
+      <div id="assets" class="page" style="display:none">
+        <h2>Asset Management — ניהול נכסים</h2>
+        <p class="muted">כל עמוד, פנס, ארון חשמל, חציה או רמזור מקבל כרטיס חיים.</p>
+        <div class="grid">
+          <div class="card"><h3>עמוד 254</h3><p>סטטוס: <span class="green">הותקן</span></p><p>פרויקט: ארד רננים</p></div>
+          <div class="card"><h3>חציה 2.5</h3><p>סטטוס: <span class="red">תקלה</span></p><p>סיבה: קו מים</p></div>
+          <div class="card"><h3>ארון חשמל A17</h3><p>סטטוס: <span class="yellow">בבדיקה</span></p></div>
+          <div class="card"><h3>רמזור R-08</h3><p>סטטוס: <span class="blue">מחכה לחומר</span></p></div>
+        </div>
+      </div>
+
+      <div id="reports" class="page" style="display:none">
+        <h2>דיווחי שטח ו־Timeline</h2>
+        <div class="actions"><button class="btn" onclick="openModal('reportModal')">+ דיווח עובד</button></div>
+        <div id="reportList"></div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<div id="projectModal" class="modal"><div class="modal-box"><button class="close" onclick="closeModal('projectModal')">X</button><h2>הוסף פרויקט</h2><input id="pName" placeholder="שם פרויקט"><input id="pCity" placeholder="עיר / אזור"><input id="pEngineer" placeholder="מהנדס אחראי"><select id="pStatus"><option>🟢 תקין</option><option>🟡 בביצוע</option><option>🔴 תקלה</option><option>🔵 מחכה לחומר</option></select><input id="pProgress" type="number" placeholder="אחוז ביצוע" value="0"><button class="btn btn-full" onclick="addProject()">שמור פרויקט</button></div></div>
+<div id="itemModal" class="modal"><div class="modal-box"><button class="close" onclick="closeModal('itemModal')">X</button><h2>הוסף חומר למחסן</h2><input id="iName" placeholder="שם חומר"><input id="iQty" type="number" placeholder="כמות"><button class="btn btn-full" onclick="addItem()">שמור חומר</button></div></div>
+<div id="movementModal" class="modal"><div class="modal-box"><button class="close" onclick="closeModal('movementModal')">X</button><h2>תנועת מחסן</h2><input id="mItem" placeholder="שם חומר"><select id="mType"><option>יציאה</option><option>החזרה</option><option>כניסה</option></select><input id="mQty" type="number" placeholder="כמות"><input id="mProject" placeholder="פרויקט"><button class="btn btn-full" onclick="addMovement()">שמור תנועה</button></div></div>
+<div id="workerModal" class="modal"><div class="modal-box"><button class="close" onclick="closeModal('workerModal')">X</button><h2>הוסף עובד</h2><input id="wName" placeholder="שם עובד"><select id="wRole"><option>עובד</option><option>מהנדס</option><option>מנהל עבודה</option><option>מחסנאי</option></select><input id="wTasks" type="number" placeholder="משימות היום" value="0"><button class="btn btn-full" onclick="addWorker()">שמור עובד</button></div></div>
+<div id="reportModal" class="modal"><div class="modal-box"><button class="close" onclick="closeModal('reportModal')">X</button><h2>דיווח עובד למהנדס</h2><input id="rProject" placeholder="פרויקט"><input id="rPoint" placeholder="נקודה בתוכנית / חציה / עמוד"><textarea id="rText" placeholder="מה בוצע או למה לא בוצע"></textarea><button class="btn btn-full" onclick="addReport()">שלח דיווח</button></div></div>
+
+<script>
+let projects=JSON.parse(localStorage.getItem('projects')||'null')||[
+{name:'פרויקט ארד רננים',city:'ערד',engineer:'מוחמד',status:'🟢 תקין',progress:85},
+{name:'כביש 25-27',city:'באר שבע',engineer:'יוסף',status:'🟡 בביצוע',progress:42},
+{name:'צומת דימונה',city:'דימונה',engineer:'אחמד',status:'🔴 תקלה',progress:18},
+{name:'רמזורים אזור תעשייה',city:'רהט',engineer:'סאלח',status:'🔵 מחכה לחומר',progress:35}
+];
+let items=JSON.parse(localStorage.getItem('items')||'null')||[
+{name:'פנסים',qty:120},{name:'עמודי תאורה',qty:55},{name:'כבלים במטר',qty:3800},{name:'ארונות חשמל',qty:12}
+];
+let workers=JSON.parse(localStorage.getItem('workers')||'null')||[
+{name:'אחמד',role:'עובד',tasks:4},{name:'יוסף',role:'מהנדס',tasks:3},{name:'מחמוד',role:'מנהל עבודה',tasks:2},{name:'סאלח',role:'מחסנאי',tasks:1}
+];
+let reports=JSON.parse(localStorage.getItem('reports')||'null')||[
+{project:'כביש 25-27',point:'חציה 3',text:'לא בוצע בגלל קו מים מתחת לנקודת החפירה'},
+{project:'ארד רננים',point:'עמוד 254',text:'הותקן עמוד ותועדו תמונות לפני/אחרי'},
+{project:'ארד רננים',point:'מחסן',text:'נלקחו 70 פנסים, הותקנו 60 וחזרו 10'},
+{project:'דימונה',point:'צומת',text:'נדרשת בדיקה של מהנדס לפני המשך חפירה'}
+];
+let movements=JSON.parse(localStorage.getItem('movements')||'null')||[
+{date:'28/06',item:'70 פנסים',type:'יציאה',qty:70,project:'ארד רננים',sign:'חתום'},
+{date:'28/06',item:'10 פנסים',type:'החזרה',qty:10,project:'ארד רננים',sign:'חתום'}
+];
+function save(){localStorage.setItem('projects',JSON.stringify(projects));localStorage.setItem('items',JSON.stringify(items));localStorage.setItem('workers',JSON.stringify(workers));localStorage.setItem('reports',JSON.stringify(reports));localStorage.setItem('movements',JSON.stringify(movements));render()}
+function openApp(){document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';document.getElementById('userRole').innerText=document.getElementById('role').value;document.getElementById('companyName').innerText=document.getElementById('company').value;render()}
+function show(id,btn){document.querySelectorAll('.page').forEach(p=>p.style.display='none');document.getElementById(id).style.display='block';document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render()}
+function openModal(id){document.getElementById(id).style.display='flex'}function closeModal(id){document.getElementById(id).style.display='none'}
+function render(){document.getElementById('projectCount').innerText=projects.length;document.getElementById('workerCount').innerText=workers.length;document.getElementById('inventoryCount').innerText=items.length;document.getElementById('reportCount').innerText=reports.length;
+document.getElementById('alerts').innerHTML=reports.slice(0,5).map(r=>'<div class="notice">⚠️ '+r.project+' · '+r.point+' — '+r.text+'</div>').join('');
+document.getElementById('projectList').innerHTML=projects.map(p=>'<div class="row"><b>'+p.name+'</b><span>'+p.status+' · '+p.progress+'% · '+p.city+' · מהנדס: '+p.engineer+'</span></div>').join('');
+document.getElementById('inventoryList').innerHTML=items.map(i=>'<div class="card"><h3>'+i.name+'</h3><p>כמות במלאי: '+i.qty+'</p></div>').join('');
+document.getElementById('workerList').innerHTML=workers.map(w=>'<div class="row"><b>'+w.name+'</b><span>'+w.role+' · משימות היום: '+w.tasks+'</span></div>').join('');
+document.getElementById('reportList').innerHTML=reports.map(r=>'<div class="notice">📅 היום · <b>'+r.project+'</b> · '+r.point+'<br>'+r.text+'</div>').join('');
+document.getElementById('movementList').innerHTML=movements.map(m=>'<tr><td>'+m.date+'</td><td>'+m.item+'</td><td>'+m.type+'</td><td>'+m.qty+'</td><td>'+m.project+'</td><td>'+m.sign+'</td></tr>').join('')}
+function addProject(){projects.unshift({name:pName.value||'פרויקט חדש',city:pCity.value||'-',engineer:pEngineer.value||'-',status:pStatus.value,progress:pProgress.value||0});closeModal('projectModal');save()}
+function addItem(){items.unshift({name:iName.value||'חומר חדש',qty:iQty.value||0});closeModal('itemModal');save()}
+function addWorker(){workers.unshift({name:wName.value||'עובד חדש',role:wRole.value,tasks:wTasks.value||0});closeModal('workerModal');save()}
+function addReport(){reports.unshift({project:rProject.value||'פרויקט',point:rPoint.value||'נקודה',text:rText.value||'דיווח חדש'});closeModal('reportModal');save()}
+function addMovement(){movements.unshift({date:new Date().toLocaleDateString('he-IL'),item:mItem.value||'חומר',type:mType.value,qty:mQty.value||0,project:mProject.value||'-',sign:'ממתין'});closeModal('movementModal');save()}
+</script>
+</body>
+</html>
