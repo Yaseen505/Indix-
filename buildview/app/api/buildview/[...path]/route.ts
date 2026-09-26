@@ -14,7 +14,7 @@ async function handle(req:Request){try{
   if(parts[0]==='state')return json(await state(store,identity));
   const p=await actor(store,identity);
   if(parts[0]==='file'&&parts[1])return await download(store,p,parts[1],req);
-  if(['receipt','handover'].includes(parts[0])&&parts[1])return await report(store,p,parts[0],parts[1]);
+  if(['receipt','handover','soa'].includes(parts[0])&&parts[1])return await report(store,p,parts[0],parts[1]);
  }else{
   const origin=req.headers.get('origin');if(!origin||![new URL(req.url).origin,'https://indix-buildview-buyer.yasensuiss.chatgpt.site'].includes(origin))return Response.json({error:'ORIGIN_REJECTED'},{status:403});
   if(parts[0]==='upload')return json(await upload(store,await actor(store,identity),req));
