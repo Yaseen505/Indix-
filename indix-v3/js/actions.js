@@ -47,18 +47,40 @@ function openProjectForm(id){
    <div><label>תאריך התחלה</label><input id="np_start" type="date" value="${esc(p.start)}"></div><div><label>יעד סיום</label><input id="np_end" type="date" value="${esc(p.end)}"></div>
    <div><label>קו רוחב (Latitude)</label><input id="np_lat" type="number" step="any" value="${esc(p.lat??"")}"></div><div><label>קו אורך (Longitude)</label><input id="np_lng" type="number" step="any" value="${esc(p.lng??"")}"></div>
    <div class="full"><button type="button" class="small" onclick="getGPS().then(g=>{$('np_lat').value=g.lat;$('np_lng').value=g.lng;toast('המיקום הנוכחי הוזן')}).catch(e=>toast(e.message,'danger'))">📍 השתמש במיקום הנוכחי שלי (כשאני באתר)</button></div>
+   ${id ? "" : `<div class="full boq-file"><label>📑 כתב כמויות / רשימת חומרים — צילום או קובץ *</label>
+     <label class="file-btn">📷 צלם או בחר קובץ<input id="np_boq" type="file" accept="image/*,.pdf,.csv,.txt,.xlsx,.xls" hidden onchange="npBoqFile(this)"></label>
+     <div id="np_boq_info" class="muted small-text">חובה לצרף. קובץ CSV מאקסל (סעיף, יחידה, כמות, מחיר) — הסעיפים ייטענו אוטומטית. צילום/PDF נשמר במסמכי הפרויקט, ואת הסעיפים מזינים או מדביקים במסך כתב כמויות.</div></div>`}
    <button class="primary full" onclick="saveProject(${id||""})">שמור פרויקט</button></div>`);
 }
-function saveProject(id){
+function npBoqFile(input){
+  const f = input.files[0]; if (!f) return;
+  $("np_boq_info").innerHTML = `✓ <b>${esc(f.name)}</b> (${num(Math.round(f.size/1024))} KB)` + (/\.(csv|txt)$/i.test(f.name) ? " — הסעיפים ייקראו מהקובץ" : "");
+}
+async function saveProject(id){
   if (!guard("manageProjects")) return;
+  const boqFile = !id ? $("np_boq")?.files[0] : null;
+  if (!id && !req(boqFile, "חובה לצרף צילום או קובץ של כתב הכמויות / רשימת החומרים")) return;
   const d = {name:val("np_name"), client:val("np_client"), budget:nval("np_budget"), status:val("np_status"), managerId:+val("np_mgr"),
     start:val("np_start"), end:val("np_end"), lat:val("np_lat")?nval("np_lat"):null, lng:val("np_lng")?nval("np_lng"):null};
   if (!req(d.name, "יש להזין שם פרויקט") || !req(d.client, "יש להזין לקוח")) return;
   if (!req(!d.end || !d.start || d.end >= d.start, "תאריך הסיום לפני תאריך ההתחלה")) return;
   if (!id && !req(!DB.projects.some(p => p.name === d.name), "כבר קיים פרויקט בשם הזה")) return;
   if (id){ Object.assign(P(id), d); audit("עריכת פרויקט", d.name); }
-  else { const p = {id:nid(), ...d}; DB.projects.push(p); audit("יצירת פרויקט", d.name); S.filters.project = String(p.id); }
-  closeModal(); refresh(); toast(id ? "הפרויקט עודכן" : "הפרויקט נוצר — כעת הוסף סעיפי כתב כמויות");
+  else {
+    const p = {id:nid(), ...d}; DB.projects.push(p); audit("יצירת פרויקט", d.name); S.filters.project = String(p.id);
+    let added = 0, data = null;
+    try {
+      if (/\.(csv|txt)$/i.test(boqFile.name)){ const txt = await boqFile.text(); added = importBoqText(p.id, txt).length; }
+      if (boqFile.type.startsWith("image/")) data = (await readImage(boqFile, 1600)).data;
+      else if (boqFile.size <= 1.5*1024*1024) data = await readFileData(boqFile);
+    } catch(e){}
+    DB.docs.push({id:nid(), projectId:p.id, name:boqFile.name, cat:"כתב כמויות", size:boqFile.size, data, by:S.user.id, at:new Date().toISOString()});
+    audit("צירוף כתב כמויות לפרויקט", boqFile.name);
+    notify(`פרויקט חדש: ${d.name} (${U(S.user.id)?.name})`, {roles:["ceo","engineer"], module:"projects"});
+    closeModal(); save(); S.filters.project = String(p.id); go("boq");
+    return toast(added ? `הפרויקט נוצר ו-${added} סעיפים נטענו מהקובץ — בדוק אותם` : "הפרויקט נוצר וכתב הכמויות נשמר במסמכים — עכשיו הזן או הדבק את הסעיפים", "success");
+  }
+  closeModal(); refresh(); toast("הפרויקט עודכן");
 }
 
 /* ------------------------------ תוכניות ------------------------------ */
@@ -123,7 +145,12 @@ function openTaskForm(id, preset = {}){
   const t = id ? T(id) : {projectId: preset.projectId || (curProject()==="all" ? visibleProjects()[0]?.id : +curProject()), boqId:"", title:preset.title||"", qty:"", assigneeId:"", location:"", due:addDays(3), notes:preset.notes||"", status:"חדש"};
   openModal(`<h2>${id?"עריכת משימה":"משימה חדשה"}</h2><div class="form-grid">
    <div><label>פרויקט *</label><select id="tk_p" onchange="taskFormDeps()">${optionList(visibleProjects().map(p=>[p.id,p.name]),t.projectId)}</select></div>
-   <div><label>סעיף בכתב הכמויות *</label><select id="tk_b"></select></div>
+   <div></div>
+   <div class="full"><label>מה צריך לבצע? * <small class="muted">הקלד מילה — למשל "פירוק" — ובחר סעיף מכתב הכמויות</small></label>
+     <input id="tk_q" autocomplete="off" placeholder="🔎 חפש בכתב הכמויות…" oninput="tkSearch()" onfocus="tkSearch()"><input type="hidden" id="tk_b">
+     <div id="tk_sug" class="sug"></div><div id="tk_sel" class="small-text"></div>
+     <div id="tk_x" class="form-grid hidden extra-box"><div><label>יחידה</label><input id="tk_xu" value="יח׳"></div><div><label>מחיר מוצע ללקוח ליח׳ (אם ידוע)</label><input id="tk_xp" type="number" step="any"></div>
+       <div><label>מחיר לקבלן ליח׳ (אם ידוע)</label><input id="tk_xs" type="number" step="any"></div><div><label>למה נדרש? (סיבה / בקשת המזמין)</label><input id="tk_xn"></div></div></div>
    <div class="full"><label>תיאור המשימה *</label><input id="tk_title" value="${esc(t.title)}" placeholder="לדוגמה: העמדת 34 עמודים — רמפה מערבית"></div>
    <div><label>כמות *</label><input id="tk_qty" type="number" min="0" step="any" value="${esc(t.qty)}"><small id="tk_rem" class="muted"></small></div>
    <div><label>אחראי (עובד / קבלן) *</label><select id="tk_a"></select></div>
@@ -135,20 +162,55 @@ function openTaskForm(id, preset = {}){
   taskFormDeps(t.boqId, t.assigneeId);
   S.draft.fromMeeting = preset.fromMeeting || null;
 }
+function tkSearch(){
+  const pid = +val("tk_p"), q = val("tk_q"), list = boqSearch(pid, q);
+  const exact = list.some(b => b.item === q);
+  if (B(val("tk_b"))?.item !== q){ $("tk_b").value = ""; if (!S.draft.extra || S.draft.extra.item !== q) tkExtraOff(); }
+  $("tk_sug").innerHTML = list.slice(0, 10).map(b => { const free = Math.max(0, boqFree(b.id, S.draft.editTask));
+      return `<button type="button" class="sug-item" onclick="tkPick(${b.id})"><b>${esc(b.item)}</b> <small class="muted">${esc(b.unit)} · יתרה פנויה ${num(free)}${b.extra?" · חריג":""}</small></button>`; }).join("")
+    + (list.length > 10 ? `<small class="muted">ועוד ${list.length-10} — המשך להקליד כדי לצמצם</small>` : "")
+    + (!projectBoq(pid).length ? `<small class="danger-text">אין סעיפים בכתב הכמויות של הפרויקט — הזן אותם במסך כתב כמויות.</small>` : "")
+    + (q && !exact ? `<button type="button" class="sug-item sug-extra" onclick="tkExtra()">➕ אחר: <b>"${esc(q)}"</b> — עבודה חריגה (לא בכתב הכמויות) · תדווח לאישור ולתשלום</button>` : "");
+}
+function tkPick(id){
+  const b = B(id); $("tk_b").value = id; $("tk_q").value = b.item; $("tk_sug").innerHTML = ""; tkExtraOff();
+  $("tk_sel").innerHTML = `✓ סעיף ${b.extra?"<b>חריג</b> ":""}בכתב הכמויות: <b>${esc(b.item)}</b> (${esc(b.unit)})`;
+  if (!val("tk_title")) $("tk_title").value = b.item; $("tk_b").onchange?.();
+  const upd = $("tk_rem"); if (upd) upd.textContent = b.extra ? "סעיף חריג — הכמות מתעדכנת לפי המשימות" : `יתרה פנויה בסעיף: ${num(Math.max(0, boqFree(b.id, S.draft.editTask)))} ${b.unit} (מתוך ${num(b.qty)})`;
+}
+function tkExtra(){
+  const q = val("tk_q"); $("tk_b").value = ""; S.draft.extra = {item:q};
+  $("tk_x").classList.remove("hidden"); $("tk_sug").innerHTML = "";
+  $("tk_xu").value = WORK[guessType(q)].unit;
+  $("tk_sel").innerHTML = `<span class="danger-text">⚠ <b>עבודה חריגה:</b> "${esc(q)}" לא מופיע בכתב הכמויות. ייפתח סעיף חריג, המנכ״ל יקבל התראה, והביצוע ייכלל בחשבון ללקוח רק אחרי אישור המזמין.</span>`;
+  if (!val("tk_title")) $("tk_title").value = q; $("tk_rem").textContent = "";
+}
+function tkExtraOff(){ S.draft.extra = null; $("tk_x")?.classList.add("hidden"); if ($("tk_sel")) $("tk_sel").innerHTML = ""; }
 function taskFormDeps(boqSel, aSel){
   const pid = +val("tk_p");
-  $("tk_b").innerHTML = projectBoq(pid).map(b => `<option value="${b.id}" ${b.id===+boqSel?"selected":""}>${esc(b.item)} (${esc(b.unit)})</option>`).join("") || `<option value="">אין סעיפים — הוסף בכתב הכמויות</option>`;
-  const people = DB.users.filter(u => u.active && (["worker","contractor","engineer"].includes(u.role)) && (u.projects==="all" || u.projects.includes(pid)));
-  $("tk_a").innerHTML = people.map(u => `<option value="${u.id}" ${u.id===+aSel?"selected":""}>${esc(u.name)} — ${ROLES[u.role]}</option>`).join("");
-  const upd = () => { const b = B(val("tk_b")); $("tk_rem").textContent = b ? `יתרה פנויה בסעיף: ${num(Math.max(0, boqFree(b.id, S.draft.editTask)))} ${b.unit} (מתוך ${num(b.qty)})` : ""; };
-  $("tk_b").onchange = upd; upd();
+  if (boqSel && B(boqSel)){ $("tk_b").value = boqSel; $("tk_q").value = B(boqSel).item; tkPick(+boqSel); }
+  else { $("tk_b").value = ""; $("tk_q").value = ""; $("tk_sug").innerHTML = ""; tkExtraOff(); }
+  const onP = u => u.projects==="all" || u.projects.includes(pid);
+  const people = DB.users.filter(u => u.active && ["worker","contractor","engineer"].includes(u.role)).sort((a,b) => onP(b) - onP(a));
+  $("tk_a").innerHTML = people.map(u => `<option value="${u.id}" ${u.id===+aSel?"selected":""}>${esc(u.name)} — ${ROLES[u.role]}${onP(u)?"":" (יצורף לפרויקט)"}</option>`).join("");
+  if (!boqSel) $("tk_rem").textContent = "";
 }
 function saveTask(id){
   if (!guard("createTask")) return;
   const d = {projectId:+val("tk_p"), boqId:+val("tk_b"), title:val("tk_title"), qty:nval("tk_qty"), assigneeId:+val("tk_a"), location:val("tk_loc"), due:val("tk_due"), notes:val("tk_notes")};
-  if (!req(d.boqId, "יש לבחור סעיף מכתב הכמויות") || !req(d.title, "יש להזין תיאור") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0") || !req(d.assigneeId, "יש לבחור אחראי")) return;
+  const X = S.draft.extra;
+  if (!d.boqId && X){
+    if (!req(X.item && X.item.length >= 2, "יש לתאר את העבודה החריגה") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0") || !req(d.assigneeId, "יש לבחור אחראי")) return;
+    const line = {id:nid(), projectId:d.projectId, type:guessType(X.item), item:X.item, unit:val("tk_xu")||"יח׳", qty:d.qty, base:0, sale:nval("tk_xp"), cost:nval("tk_xs"), sub:val("tk_xs")===""?null:nval("tk_xs"),
+      extra:true, extraStatus:EXTRA.PENDING, extraBy:S.user.id, extraAt:today(), extraNote:val("tk_xn")};
+    DB.boq.push(line); d.boqId = line.id;
+    audit("עבודה חריגה נפתחה", `${P(d.projectId)?.name}: ${X.item} · ${d.qty} ${line.unit}`);
+    notify(`⚠ עבודה חריגה (לא בכתב הכמויות): ${X.item} — ${num(d.qty)} ${line.unit} · ${P(d.projectId)?.name}. יש לתמחר ולאשר מול המזמין.`, {roles:["ceo"], module:"boq"});
+  }
+  if (!req(d.boqId, "יש לבחור סעיף מכתב הכמויות — או לבחור \"אחר\" לעבודה חריגה") || !req(d.title, "יש להזין תיאור") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0") || !req(d.assigneeId, "יש לבחור אחראי")) return;
   const free = boqFree(d.boqId, id);
-  if (d.qty > free + 0.001){
+  if (B(d.boqId)?.extra){ /* סעיף חריג: הכמות מתעדכנת לפי סך המשימות */ }
+  else if (d.qty > free + 0.001){
     const b = B(d.boqId), msg = `הכמות (${num(d.qty)}) גדולה מהיתרה הפנויה בסעיף "${b.item}" (${num(Math.max(0,free))} ${b.unit} — אחרי משימות פתוחות וביצוע מאושר)`;
     if (S.user.role !== "ceo") return toast(msg + ". יש להגדיל את הכמות בכתב הכמויות (באישור המזמין) או להקטין את המשימה.", "danger");
     if (!confirm(msg + ".\nליצור בכל זאת? (חריגה מהחוזה — יש לתאם עם המזמין)")) return;
@@ -156,10 +218,16 @@ function saveTask(id){
   }
   if (id){ const t = T(id); const prevA = t.assigneeId; Object.assign(t, d, {status:val("tk_st")||t.status}); audit("עריכת משימה", d.title);
     if (prevA !== d.assigneeId) notify(`שויכה אליך משימה: ${d.title}`, {userId:d.assigneeId, module:"tasks"}); }
-  else { const t = {id:nid(), ...d, status:"חדש", createdBy:S.user.id}; DB.tasks.push(t); audit("יצירת משימה", `${d.title} → ${U(d.assigneeId)?.name}`);
+  const who = U(d.assigneeId);
+  if (who && who.projects !== "all" && !who.projects.includes(d.projectId)){
+    if (CLOUD.enabled && S.user.role !== "ceo") notify(`${who.name} קיבל משימה בפרויקט ${P(d.projectId)?.name} — יש לשייך אותו לפרויקט במסך ניהול והרשאות`, {roles:["ceo"], module:"admin"});
+    else { who.projects.push(d.projectId); audit("שיוך עובד לפרויקט", `${who.name} → ${P(d.projectId)?.name}`); }
+  }
+  if (!id){ const t = {id:nid(), ...d, status:"חדש", createdBy:S.user.id}; DB.tasks.push(t); audit("יצירת משימה", `${d.title} → ${U(d.assigneeId)?.name}`);
     notify(`משימה חדשה: ${d.title} (${P(d.projectId)?.name})`, {userId:d.assigneeId, module:"tasks"});
     if (S.draft.fromMeeting){ const [mid,i] = S.draft.fromMeeting; const m = DB.meetings.find(x=>x.id===mid); if (m) m.decisions[i].taskId = t.id; } }
-  closeModal(); refresh(); toast(id ? "המשימה עודכנה" : "המשימה נוצרה ונשלחה לעובד");
+  const xb = B(d.boqId); if (xb?.extra){ const sum = DB.tasks.filter(t => t.boqId===xb.id).reduce((a,t)=>a+t.qty,0); xb.qty = Math.max(sum, boqDone(xb)); }
+  closeModal(); refresh(); toast(id ? "המשימה עודכנה" : X && xb?.extra && xb.extraAt===today() && !id ? "המשימה נוצרה — העבודה החריגה דווחה למנכ״ל" : "המשימה נוצרה ונשלחה לעובד");
 }
 /* יתרה פנויה בסעיף: כמות חוזית פחות ביצוע מאושר ופחות יתרות של משימות פתוחות אחרות */
 function boqFree(boqId, exceptTaskId){
@@ -452,6 +520,43 @@ function saveSupplier(id){
 }
 
 /* ------------------------------ כתב כמויות ------------------------------ */
+/* ייבוא כתב כמויות: הדבקה מאקסל או CSV — עמודות: סעיף | יחידה | כמות | מחיר מכירה | עלות | מחיר קבלן */
+function parseBoqText(txt){
+  const out = [];
+  String(txt||"").split(/\r?\n/).forEach(line => {
+    if (!line.trim()) return;
+    const c = line.includes("\t") ? line.split("\t") : line.split(/[,;](?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    const cell = i => (c[i]||"").replace(/^"|"$/g,"").trim(), n = i => parseFloat(cell(i).replace(/[₪,\s]/g,""));
+    const item = cell(0), qty = n(2);
+    if (!item || !(qty > 0)) return; // שורת כותרת או ריקה
+    out.push({item, unit:cell(1) || "יח׳", qty, sale:n(3)||0, cost:n(4)||0, sub:isNaN(n(5)) ? null : n(5)});
+  });
+  return out;
+}
+function importBoqText(pid, txt){
+  const rows = parseBoqText(txt);
+  rows.forEach(r => DB.boq.push({id:nid(), projectId:+pid, type:guessType(r.item), item:r.item, unit:r.unit, qty:r.qty, base:0, sale:r.sale, cost:r.cost || Math.round(r.sale*0.75*100)/100, sub:r.sub}));
+  if (rows.length) audit("ייבוא כתב כמויות", `${P(pid)?.name}: ${rows.length} סעיפים`);
+  return rows;
+}
+function openBoqImport(pid){
+  if (!guard("editBoq")) return;
+  openModal(`<h2>ייבוא כתב כמויות — ${pname(pid)}</h2>
+   <p class="muted">באקסל: מסמנים את השורות (סעיף, יחידה, כמות, מחיר מכירה, עלות, מחיר לקבלן) ← העתק ← מדביקים כאן. שורות כותרת מדולגות אוטומטית. עמודות עלות ומחיר קבלן לא חובה.</p>
+   <textarea id="bi_txt" rows="9" dir="rtl" placeholder="פירוק עמוד תאורה קיים	יח׳	40	320	200	180" oninput="boqImportPreview(${pid})"></textarea>
+   <label class="file-btn">📄 או בחר קובץ CSV<input type="file" accept=".csv,.txt" hidden onchange="this.files[0].text().then(t=>{$('bi_txt').value=t;boqImportPreview(${pid})})"></label>
+   <div id="bi_prev"></div><button class="primary full" onclick="saveBoqImport(${pid})">ייבא סעיפים</button>`, true);
+}
+function boqImportPreview(){
+  const rows = parseBoqText(val("bi_txt"));
+  $("bi_prev").innerHTML = rows.length ? `<p><b>${rows.length} סעיפים זוהו:</b></p>` + `<table class="mini"><thead><tr><th>סעיף</th><th>סוג</th><th>יח׳</th><th>כמות</th><th>מחיר</th><th>עלות</th><th>קבלן</th></tr></thead><tbody>${rows.slice(0,30).map(r=>`<tr><td>${esc(r.item)}</td><td>${esc(WORK[guessType(r.item)].name)}</td><td>${esc(r.unit)}</td><td>${num(r.qty)}</td><td>${money(r.sale)}</td><td>${r.cost?money(r.cost):"—"}</td><td>${r.sub!=null?money(r.sub):"—"}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">לא זוהו סעיפים עדיין.</p>`;
+}
+function saveBoqImport(pid){
+  if (!guard("editBoq")) return;
+  const rows = importBoqText(pid, val("bi_txt"));
+  if (!req(rows.length, "לא זוהו סעיפים — ודא שיש עמודות סעיף, יחידה וכמות")) return;
+  closeModal(); refresh(); toast(`${rows.length} סעיפים יובאו לכתב הכמויות`);
+}
 function openBoqLine(id, pid){
   if (!guard("editBoq")) return;
   const b = id ? B(id) : {projectId:pid, type:"dig", item:"", unit:"מ׳", qty:"", base:0, sale:"", cost:""};
@@ -459,14 +564,21 @@ function openBoqLine(id, pid){
    <div><label>סוג עבודה</label><select id="bq_t" onchange="if(!$('bq_i').value||${!id}){$('bq_i').value=WORK[this.value].name;$('bq_u').value=WORK[this.value].unit}">${optionList(Object.entries(WORK).map(([k,w])=>[k,w.name]),b.type)}</select></div>
    <div><label>יחידה</label><input id="bq_u" value="${esc(b.unit)}"></div><div class="full"><label>תיאור הסעיף *</label><input id="bq_i" value="${esc(b.item||WORK[b.type].name)}"></div>
    <div><label>כמות חוזית *</label><input id="bq_q" type="number" step="any" value="${esc(b.qty)}"></div><div><label>כמות פתיחה (בוצע לפני המערכת)</label><input id="bq_b" type="number" step="any" value="${esc(b.base)}"></div>
-   <div><label>מחיר מכירה ליח׳ *</label><input id="bq_s" type="number" step="any" value="${esc(b.sale)}"></div><div><label>עלות ליח׳ *</label><input id="bq_c" type="number" step="any" value="${esc(b.cost)}"></div>
+   <div><label>מחיר מכירה ליח׳ (ללקוח) *</label><input id="bq_s" type="number" step="any" value="${esc(b.sale)}"></div><div><label>עלות ליח׳ *</label><input id="bq_c" type="number" step="any" value="${esc(b.cost)}"></div>
+   <div><label>מחיר לקבלן משנה ליח׳</label><input id="bq_sub" type="number" step="any" value="${esc(b.sub ?? "")}" placeholder="ריק = לפי העלות"><small class="muted">משמש לחשבון החודשי של הקבלן</small></div><div></div>
+   ${b.extra ? `<div class="full notice ${isExtraPending(b)?"warn":""}">⚠ <b>עבודה חריגה</b> — לא הייתה בכתב הכמויות המקורי. נפתחה ע״י ${uname(b.extraBy)} ב-${fmtDate(b.extraAt)}${b.extraNote?` · ${esc(b.extraNote)}`:""}.<br>סטטוס: <b>${esc(b.extraStatus)}</b>${isExtraPending(b)?" — לא נכלל בחשבון ללקוח עד לאישור.":""}
+     ${isExtraPending(b) && S.user.role==="ceo" ? `<label class="chk"><input type="checkbox" id="bq_xok"> המזמין אישר את החריג במחיר שלמעלה — לכלול בחשבונות</label>` : ""}</div>` : ""}
    <button class="primary full" onclick="saveBoqLine(${id||"null"},${b.projectId})">שמור</button>
    ${id && !DB.tasks.some(t=>t.boqId===id) ? `<button class="danger full" onclick="delBoqLine(${id})">מחק סעיף</button>` : ""}</div>`);
 }
 function saveBoqLine(id, pid){
   if (!guard("editBoq")) return;
-  const d = {type:val("bq_t"), unit:val("bq_u"), item:val("bq_i"), qty:nval("bq_q"), base:nval("bq_b"), sale:nval("bq_s"), cost:nval("bq_c")};
-  if (!req(d.item, "יש להזין תיאור") || !req(d.qty > 0, "כמות חוזית חייבת להיות גדולה מ-0") || !req(d.sale > 0 && d.cost >= 0, "יש להזין מחיר מכירה ועלות")) return;
+  const d = {type:val("bq_t"), unit:val("bq_u"), item:val("bq_i"), qty:nval("bq_q"), base:nval("bq_b"), sale:nval("bq_s"), cost:nval("bq_c"), sub:val("bq_sub")===""?null:nval("bq_sub")};
+  const cur = id ? B(id) : null, approveX = !!$("bq_xok")?.checked;
+  if (!req(d.item, "יש להזין תיאור") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0")) return;
+  if (!(cur?.extra && !approveX) && !req(d.sale > 0 && d.cost >= 0, "יש להזין מחיר מכירה ועלות")) return;
+  if (approveX){ d.extraStatus = EXTRA.OK; d.extraApprovedBy = S.user.id; d.extraApprovedAt = today(); audit("אישור עבודה חריגה", `${d.item}: ${money(d.sale)} ליח׳`);
+    notify(`עבודה חריגה אושרה ותיכלל בחשבון: ${d.item} (${P(pid)?.name})`, {roles:["engineer"], module:"billing"}); }
   if (d.cost > d.sale && !confirm("העלות גבוהה ממחיר המכירה — הסעיף הפסדי. להמשיך?")) return;
   if (id){ const b = B(id); audit("עדכון סעיף כתב כמויות", `${d.item}: כמות ${b.qty}→${d.qty}, מחיר ${b.sale}→${d.sale}`); Object.assign(b, d); }
   else { DB.boq.push({id:nid(), projectId:pid, ...d}); audit("סעיף חדש בכתב כמויות", `${P(pid)?.name}: ${d.item}`); }
@@ -664,6 +776,43 @@ function importBackup(input){
 function resetDemo(){ if (CLOUD.enabled) return; if (!guard("admin") || !confirm("כל הנתונים יימחקו ויוחלפו בנתוני דוגמה. להמשיך?")) return; localStorage.removeItem(DB_KEY); localStorage.removeItem(SESSION_KEY); location.hash = ""; location.reload(); }
 
 
+/* ------------------------------ חשבונות קבלני משנה ------------------------------ */
+function subHTML(uid, per){
+  const u = U(uid), lines = subStatementLines(uid, per), total = lines.reduce((a,l)=>a+l.total,0);
+  const pend = DB.reports.filter(r => r.userId===+uid && r.status==="pending");
+  const sb = (DB.subbills||[]).find(s => s.userId===+uid && s.period===per);
+  return `<p>קבלן: <b>${esc(u?.name)}</b>${u?.phone?` · ${esc(u.phone)}`:""} · חודש: <b>${per}</b>${sb?` · ${st(sb.status)}`:""}</p>
+  <table class="mini bill"><thead><tr><th>פרויקט</th><th>סעיף</th><th>יח׳</th><th>כמות מאושרת</th><th>מחיר ליח׳</th><th>סכום</th></tr></thead><tbody>
+  ${lines.map(l => `<tr><td>${pname(l.projectId)}</td><td>${esc(l.item)}${l.extra?" "+tag("חריג","danger"):""}</td><td>${esc(l.unit)}</td><td>${num(l.qty)}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">אין עבודות מאושרות בחודש זה</td></tr>`}</tbody>
+  <tfoot><tr><td colspan="5">סה״כ לפני מע״מ</td><td>${money(total)}</td></tr><tr><td colspan="5">מע״מ 18%</td><td>${money(total*0.18)}</td></tr><tr><td colspan="5"><b>סה״כ לתשלום</b></td><td><b>${money(total*1.18)}</b></td></tr></tfoot></table>
+  ${pend.length ? `<p class="muted">⏳ ${pend.length} דיווחים נוספים ממתינים לאישור מהנדס — ייכנסו לחשבון אחרי האישור.</p>` : ""}
+  <p class="muted">כולל רק עבודות שאושרו ע״י מהנדס. עבודות חריגות מסומנות ומשולמות לפי המחיר שנקבע לקבלן.</p>`;
+}
+function viewSub(uid, per){
+  if (S.user.id !== +uid && !can("billing")) return toast("אין לך הרשאה","danger");
+  openModal(`<h2>חשבון קבלן — ${per}</h2>${subHTML(uid, per)}<div class="actions"><button class="dark" onclick="printHTML(printHeader('חשבון קבלן משנה — ${per}')+subHTML(${uid},'${per}')+'<div class=sign-line>חתימת מהנדס: ____________ &nbsp; חתימת הקבלן: ____________</div>')">🖨 הדפס / שמור PDF</button></div>`, true);
+}
+function approveSub(uid, per){
+  if (!guard("billing")) return;
+  const lines = subStatementLines(uid, per), total = lines.reduce((a,l)=>a+l.total,0);
+  if (!req(total > 0, "אין עבודות מאושרות לחודש זה")) return;
+  if (!confirm(`לאשר לתשלום את חשבון ${U(uid)?.name} לחודש ${per} על סך ${money(total)} (לפני מע״מ)?`)) return;
+  DB.subbills = DB.subbills || [];
+  let sb = DB.subbills.find(s => s.userId===+uid && s.period===per);
+  if (!sb){ sb = {id:nid(), userId:+uid, period:per}; DB.subbills.push(sb); }
+  Object.assign(sb, {lines, total, status:"אושר לתשלום", approvedBy:S.user.id, approvedAt:today()});
+  audit("אישור חשבון קבלן", `${U(uid)?.name} ${per}: ${money(total)}`);
+  notify(`החשבון שלך לחודש ${per} אושר לתשלום: ${money(total)} + מע״מ`, {userId:+uid, module:"dashboard"});
+  notify(`חשבון קבלן ${U(uid)?.name} (${per}) אושר וממתין לתשלום: ${money(total)}`, {roles:["ceo"], module:"billing"});
+  closeModal(); refresh(); toast("חשבון הקבלן אושר לתשלום");
+}
+function paySub(id){
+  if (!guard("markPaid")) return; const sb = DB.subbills.find(s => s.id===id);
+  if (!confirm(`לסמן כשולם: ${U(sb.userId)?.name} ${sb.period} — ${money(sb.total)}?`)) return;
+  sb.status = "שולם"; sb.paidAt = today(); audit("תשלום לקבלן", `${U(sb.userId)?.name} ${sb.period}: ${money(sb.total)}`);
+  notify(`התשלום על חשבון ${sb.period} בוצע: ${money(sb.total)} + מע״מ`, {userId:sb.userId, module:"dashboard"}); refresh(); toast("סומן כשולם");
+}
+
 /* ------------------------------ תוספות V3.3 ------------------------------ */
 /* ביטול דיווח שטח ע״י העובד (רק כל עוד לא נבדק) */
 function cancelReport(id){
@@ -749,7 +898,7 @@ function init(){
     afterAuth().catch(e => authMsg("שגיאה: " + e.message, true));
     return;
   }
-  load(); Object.assign(MATERIALS, DB.customMaterials || {});
+  load(); Object.assign(MATERIALS, DB.customMaterials || {}); if (!DB.subbills) DB.subbills = [];
   renderLogin();
   $("pinInput").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
   window.addEventListener("storage", e => { if (e.key === DB_KEY && S.user){ load(); S.user = U(S.user.id) || S.user; render(); } }); // סנכרון בין לשוניות

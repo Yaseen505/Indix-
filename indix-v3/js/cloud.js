@@ -3,7 +3,7 @@
    INDIX — שכבת ענן (Supabase): התחברות, סנכרון, קבצים, זמן אמת
    אם אין הגדרות ב-config.js — המערכת עובדת במצב מקומי (כמו קודם).
    ========================================================================= */
-const COLLS = ["users","projects","boq","tasks","reports","daily","plans","stock","movements","suppliers","requests","bills","tenders","meetings","docs","notes","audit"];
+const COLLS = ["users","projects","boq","tasks","reports","daily","plans","stock","movements","suppliers","requests","bills","tenders","meetings","docs","notes","audit","subbills"];
 const FILE_FIELDS = ["photo","img","signature","file","data"];
 const CACHE_KEY = "indix_cloud_cache";
 

@@ -2,7 +2,7 @@
 /* =========================================================================
    INDIX V3.1 — מפרט 1598 — ליבת המערכת: נתונים, הרשאות, עזרים, AI
    ========================================================================= */
-const APP_VERSION = "V3.3 — מפרט 1598";
+const APP_VERSION = "V3.4 — מפרט 1598";
 const DB_KEY = "indix_v3_db", SESSION_KEY = "indix_session", DB_VER = 3;
 
 const MODULES = [
@@ -72,6 +72,7 @@ const WORK = {
   cable:{name:"השחלת כבל 5×25 Al",unit:"מ׳",daily:800,color:"#dc2626",mat:"cable"},
   cabinet:{name:"מרכזיית תאורה",unit:"יח׳",daily:2,color:"#7c3aed",mat:"cabinet"},
   signal:{name:"רמזור (ראש + עמוד)",unit:"יח׳",daily:6,color:"#16a34a",mat:"signal"},
+  remove:{name:"פירוק",unit:"יח׳",daily:30,color:"#ea580c",mat:null},
   other:{name:"אחר",unit:"יח׳",daily:50,color:"#64748b",mat:null}
 };
 const MATERIALS = {
@@ -79,7 +80,35 @@ const MATERIALS = {
   pole:{name:"עמוד תאורה 10 מ׳",unit:"יח׳"}, conduit:{name:"צינור 110 מ״מ",unit:"מ׳"},
   cabinet:{name:"מרכזיית תאורה",unit:"יח׳"}, signal:{name:"ראש רמזור LED",unit:"יח׳"}
 };
-const DOC_CATS = ["חוזה","תוכנית","חשבון","תעודת משלוח","אישור","בטיחות","אחר"];
+const DOC_CATS = ["חוזה","כתב כמויות","תוכנית","חשבון","תעודת משלוח","אישור","בטיחות","אחר"];
+const EXTRA = { PENDING:"ממתין לאישור מזמין", OK:"אושר" };
+
+/* זיהוי סוג עבודה מתיאור חופשי של סעיף */
+function guessType(text){
+  const t = String(text||"");
+  if (/פירוק|הסרת|הורדת/.test(t)) return "remove";
+  // הסוג נקבע לפי המילה המוקדמת ביותר בתיאור ("חפירה לכבלים" = חפירה, "השחלת כבל בתעלה" = כבל)
+  const rules = [["signal",/רמזור/],["cabinet",/מרכזי|לוח חשמל|ארון/],["cable",/כבל|השחלת|מוליך/],["fixture",/גוף|פנס|LED/i],["pole",/עמוד/],["dig",/חפיר|תעל/]];
+  let best = "other", at = Infinity;
+  rules.forEach(([k,re]) => { const m = t.search(re); if (m >= 0 && m < at){ at = m; best = k; } });
+  return best;
+}
+/* חיפוש סעיפים בכתב הכמויות לפי מילים (למשל "פירוק") */
+function boqSearch(pid, q){
+  const words = String(q||"").trim().split(/\s+/).filter(Boolean);
+  return projectBoq(pid).filter(b => words.every(w => b.item.includes(w) || (WORK[b.type]?.name||"").includes(w)));
+}
+const isExtraPending = b => !!(b && b.extra && b.extraStatus !== EXTRA.OK);
+/* מחיר לקבלן משנה ליחידה */
+const subRate = b => b ? (b.sub != null && b.sub !== "" ? +b.sub : +b.cost || 0) : 0;
+/* שורות חשבון קבלן משנה לחודש: רק כמויות שאושרו ע״י מהנדס */
+function subStatementLines(uid, period){
+  const reps = DB.reports.filter(r => r.userId===+uid && r.status==="approved" && r.date.slice(0,7)===period);
+  const by = {};
+  reps.forEach(r => { const b = B(r.boqId); if (!b) return; const k = b.id;
+    (by[k] = by[k] || {boqId:b.id, projectId:b.projectId, item:b.item, unit:b.unit, qty:0, rate:subRate(b), extra:!!b.extra, reports:0}); by[k].qty += r.qty; by[k].reports++; });
+  return Object.values(by).map(l => ({...l, total:Math.round(l.qty*l.rate*100)/100})).sort((a,b)=>a.projectId-b.projectId || a.item.localeCompare(b.item));
+}
 const REQ = { WAIT_CEO:"ממתין לאישור מנכ״ל", APPROVED:"מאושר — ממתין להזמנה", ORDERED:"הוזמן — ממתין לאספקה", SUPPLIED:"סופק למחסן", REJECTED:"נדחה" };
 
 /* ------------------------------ מצב ונתונים ------------------------------ */
@@ -226,7 +255,7 @@ function demoPlanSVG(){
 function load(){
   try { DB = JSON.parse(localStorage.getItem(DB_KEY)); } catch(e){ DB = null; }
   // גרסת הדגמה חדשה נטענת פעם אחת (מחליפה נתוני הדגמה ישנים במכשיר)
-  const demoFlag = window.INDIX_DEMO ? "indix_demo_loaded_" + window.INDIX_DEMO.ref : null;
+  const demoFlag = window.INDIX_DEMO ? "indix_demo_loaded_" + window.INDIX_DEMO.ref + "_" + (window.INDIX_DEMO.v||1) : null;
   if (!DB || DB.ver !== DB_VER || (demoFlag && !localStorage.getItem(demoFlag))){ DB = seed(); save(); if (demoFlag) localStorage.setItem(demoFlag, "1"); }
 }
 function save(){
@@ -377,6 +406,8 @@ function aiFindings(){
     if (a.score < 45) add("high",`דיווח שטח חשוד #${r.id} — ${P(r.projectId)?.name}`, a.flags.filter(f=>f[0]!=="ok").map(f=>f[1]).join(" · "),"fieldAI",M);
     if (age > 2) add("mid",`דיווח #${r.id} ממתין לאישור יותר מיומיים`,"עיכוב באישור מעכב את החשבון החודשי","fieldAI",M);
   });
+  DB.boq.filter(b => isExtraPending(b) && canSeeProject(b.projectId)).forEach(b => { const d = boqDone(b);
+    add(d ? "high" : "mid", `עבודה חריגה ממתינה לאישור מזמין — ${P(b.projectId)?.name}`, `${b.item}${d?` · בוצע ${num(d)} ${b.unit} שעוד לא ניתן לחייב`:""} · יש לתמחר ולאשר מול המזמין`, "boq", M); });
   DB.tasks.filter(t=>t.status!=="הושלם" && t.due && t.due < today() && canSeeProject(t.projectId)).forEach(t =>
     add("mid",`משימה באיחור — ${t.title}`,`יעד: ${fmtDate(t.due)} · אחראי: ${U(t.assigneeId)?.name||"-"}`,"tasks",[...M]));
   DB.stock.filter(s=>s.qty < s.min).forEach(s => add(s.qty===0?"high":"mid",`מלאי נמוך — ${matName(s.mat)}`,`במלאי ${num(s.qty)} ${MATERIALS[s.mat].unit}, מינימום ${num(s.min)}`,"warehouse",["ceo","purchasing","storekeeper","engineer"]));

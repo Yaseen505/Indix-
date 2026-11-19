@@ -24,7 +24,7 @@ async function toastText(){ const t = await S('#toasts .toast').last().textConte
 async function clickText(text, scope = 'body'){ await page.locator(scope).getByRole('button', {name:text, exact:false}).first().click(); await page.waitForTimeout(120); }
 async function modalOpen(){ return !(await S('#modal').getAttribute('class')).includes('hidden'); }
 async function loginAs(name){
-  if (await S('#appView').isVisible()) { await S('.logout').click(); await page.waitForLoadState('load'); await page.waitForTimeout(250); }
+  if (await S('#appView').isVisible()) { await ev(() => logout()); await page.waitForLoadState('load'); await page.waitForTimeout(250); }
   const opt = await page.locator('#userInput option', {hasText:name}).first().getAttribute('value');
   await S('#userInput').selectOption(opt); await S('#pinInput').fill(await ev(id => String(U(id).pin), +opt)); await S('#localLogin button.primary').click();
   await page.waitForTimeout(250);
@@ -72,11 +72,11 @@ if (!(await ev(() => DB.suppliers.some(s => s.name==='ספק בדיקה' && s.pr
 // project
 await nav('projects'); await clickText('+ פרויקט חדש');
 await S('#np_name').fill('פרויקט בדיקה — כפר כנא'); await S('#np_client').fill('מועצה מקומית כפר כנא'); await S('#np_budget').fill('500000');
-await S('#np_lat').fill('32.7021'); await S('#np_lng').fill('35.1082'); await submit('projects');
+await S('#np_lat').fill('32.7021'); await S('#np_lng').fill('35.1082'); await S('#np_boq').setInputFiles('/home/claude/e2e/photo.png'); await S('#modal button.primary').click(); await page.waitForTimeout(500);
 const pid = await ev(() => DB.projects.find(p => p.name==='פרויקט בדיקה — כפר כנא')?.id);
 if (!pid) bug('projects','project not created'); else log('  project', pid);
 // duplicate name
-await clickText('+ פרויקט חדש'); await S('#np_name').fill('פרויקט בדיקה — כפר כנא'); await S('#np_client').fill('x'); await submit('projects', true);
+await nav('projects'); await clickText('+ פרויקט חדש'); await S('#np_name').fill('פרויקט בדיקה — כפר כנא'); await S('#np_client').fill('x'); await S('#np_boq').setInputFiles('/home/claude/e2e/photo.png'); await submit('projects', true);
 if ((await ev(() => DB.projects.filter(p => p.name==='פרויקט בדיקה — כפר כנא').length)) > 1) bug('projects','duplicate project allowed'); await page.keyboard.press('Escape');
 
 // BOQ lines
@@ -103,7 +103,7 @@ if (!plan) bug('plans','plan upload failed'); else {
 // tasks via UI
 async function newTask(type, title, qty, who){
   await nav('tasks'); await clickText('+ משימה'); await S('#tk_p').selectOption(String(pid)); await page.waitForTimeout(80);
-  const bid = await ev(([p,t]) => projectBoq(p).find(b=>b.type===t).id, [pid,type]); await S('#tk_b').selectOption(String(bid));
+  const bid = await ev(([p,t]) => projectBoq(p).find(b=>b.type===t).id, [pid,type]); await ev(id => tkPick(id), bid);
   await S('#tk_title').fill(title); await S('#tk_qty').fill(String(qty));
   const uid = await ev(n => DB.users.find(u=>u.name===n).id, who);
   const opts = await S('#tk_a option').allTextContents();
@@ -116,7 +116,7 @@ const tCable = await newTask('cable','השחלת כבל 400 מ׳',400,'קבלן 
 const tPole = await newTask('pole','העמדת 12 עמודים',12,'עובד בדיקה');
 // over-BOQ task (qty bigger than contract) — should warn/block
 await nav('tasks'); await clickText('+ משימה'); await S('#tk_p').selectOption(String(pid)); await page.waitForTimeout(80);
-await S('#tk_b').selectOption(String(await ev(p => projectBoq(p).find(b=>b.type==='pole').id, pid))); await S('#tk_title').fill('משימה חורגת'); await S('#tk_qty').fill('5000');
+await ev(p => tkPick(projectBoq(p).find(b=>b.type==='pole').id), pid); await S('#tk_title').fill('משימה חורגת'); await S('#tk_qty').fill('5000');
 await S('#tk_a').selectOption(String(await ev(() => DB.users.find(u=>u.name==='עובד בדיקה').id))); await submit('tasks', true);
 if (!(await ev(() => DB.audit.some(a => a.action==='חריגה מכתב כמויות במשימה')))) bug('tasks','CEO over-BOQ override not audited');
 await ev(() => { const t = DB.tasks.find(t=>t.title==='משימה חורגת'); if (t){ DB.tasks = DB.tasks.filter(x=>x!==t); save(); } }); await page.keyboard.press('Escape').catch(()=>{});

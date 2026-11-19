@@ -113,6 +113,7 @@ function dashManager(){
   const waiting = [
     ...pendR.map(r => `<div class="timeline-item lvl-mid">📸 דיווח שטח #${r.id} · ${pname(r.projectId)} · ${uname(r.userId)} · ${num(r.qty)} ${esc(B(r.boqId)?.unit||"")} ${scoreTag(analyzeReport(r).score)} <button class="small" onclick="openApprove(${r.id})">בדוק ואשר</button></div>`),
     ...waitCeo.map(r => `<div class="timeline-item lvl-high">🛒 דרישת רכש ${r.id} · ${pname(r.projectId)} · ${esc(matName(r.mat))} ${num(r.qty)} — ${esc(r.overMsg)} <button class="small" onclick="ceoDecide(${r.id},true)">אשר</button> <button class="small danger" onclick="ceoDecide(${r.id},false)">דחה</button></div>`),
+    ...(S.user.role==="ceo" ? DB.boq.filter(b => isExtraPending(b) && canSeeProject(b.projectId)).map(b => `<div class="timeline-item lvl-high">⚠ עבודה חריגה · ${pname(b.projectId)} · ${esc(b.item)} · ${num(b.qty)} ${esc(b.unit)}${boqDone(b)?` (בוצע ${num(boqDone(b))})`:""} <button class="small" onclick="openBoqLine(${b.id})">תמחר ואשר</button></div>`) : []),
     ...pendD.map(d => `<div class="timeline-item lvl-low">📋 יומן עבודה ${fmtDate(d.date)} · ${pname(d.projectId)} <button class="small" onclick="openDaily(${d.projectId},'${d.date}')">פתח</button></div>`)
   ];
   return `<div class="grid kpis">
@@ -141,6 +142,8 @@ function dashField(){
     <p>בוצע ${num(done)} / ${num(t.qty)} ${esc(B(t.boqId)?.unit||"")}${pend?` · ממתין ${num(pend)}`:""}<br>יעד: ${fmtDate(t.due)}</p>
     ${t.notes?`<p class="notice">${esc(t.notes)}</p>`:""}
     <div class="actions">${t.status==="חדש"?`<button onclick="startTask(${t.id})">▶ התחל עבודה</button>`:""}<button class="dark" onclick="reportTask(${t.id})">📸 דווח ביצוע</button></div></div>`; }).join("") || `<div class="card empty">אין משימות פתוחות 🎉</div>`}</div>
+  ${S.user.role==="contractor" ? `<div class="section-title"><h3>החשבון החודשי שלי</h3></div><div class="grid kpis">${monthsBack(2).map(m => { const ls = subStatementLines(S.user.id, m), sb = (DB.subbills||[]).find(s=>s.userId===S.user.id && s.period===m);
+      return `<div class="card kpi"><span class="muted">${m}${sb?" · "+esc(sb.status):""}</span><div class="num">${money(ls.reduce((a,l)=>a+l.total,0))}</div><small class="muted">${ls.length} סעיפים מאושרים</small><br><button class="small" onclick="viewSub(${S.user.id},'${m}')">הצג חשבון</button></div>`; }).join("")}</div>` : ""}
   <div class="section-title"><h3>הדיווחים האחרונים שלי</h3></div>
   ${table("myReps",["תאריך","משימה","כמות","סטטוס","הערת מהנדס"], rs.map(r => [fmtDate(r.date), esc(T(r.taskId)?.title||"-"), num(r.qty), rst(r), esc(r.decisionNote||"")]), {empty:"עוד לא שלחת דיווחים"})}`;
 }
@@ -352,10 +355,14 @@ function boq(){
   const lines = projectBoq(pid), m = can("seeMoney");
   let tq = 0, tv = 0, tc = 0;
   const rows = lines.map(b => { const d = boqDone(b), pe = boqPending(b), rem = b.qty - d; tq += b.qty*b.sale; tv += d*b.sale; tc += d*b.cost;
-    const r = [`<b>${esc(b.item)}</b>`, esc(b.unit), num(b.qty), num(d), pe?num(pe):"-", rem<0?`<span class="danger-text">${num(rem)}</span>`:num(rem), `${pct(d,b.qty)}%`,
+    const r = [`<b>${esc(b.item)}</b>${b.extra?" "+(isExtraPending(b)?tag("חריג — ממתין לאישור מזמין","danger"):tag("חריג מאושר","info")):""}`, esc(b.unit), num(b.qty), num(d), pe?num(pe):"-", rem<0?`<span class="danger-text">${num(rem)}</span>`:num(rem), `${pct(d,b.qty)}%`,
       ...(m?[money(b.sale), money(b.cost), money(d*b.sale)]:[]), can("editBoq")?`<button class="small" onclick="openBoqLine(${b.id})">ערוך</button>`:""];
     if (rem < 0) r._cls = "row-late"; return r; });
-  return head("כתב כמויות", projectSelect("project", false) + (can("editBoq")?`<button class="dark" onclick="openBoqLine(null,${pid})">+ סעיף</button>`:""), "boqT", "כתב-כמויות-"+(P(pid)?.name||""))
+  const boqDocs = DB.docs.filter(d => d.projectId===+pid && d.cat==="כתב כמויות");
+  const xp = lines.filter(isExtraPending);
+  return head("כתב כמויות", projectSelect("project", false) + (can("editBoq")?`<button onclick="openBoqImport(${pid})">📋 ייבוא מאקסל</button><button class="dark" onclick="openBoqLine(null,${pid})">+ סעיף</button>`:""), "boqT", "כתב-כמויות-"+(P(pid)?.name||""))
+   + (boqDocs.length ? `<div class="notice">📑 כתב הכמויות המקורי: ${boqDocs.map(d => d.data ? `<button class="small" onclick="openDoc(${d.id})">${esc(d.name)}</button>` : esc(d.name)).join(" ")}</div>` : `<div class="notice warn">לא צורף קובץ/צילום של כתב הכמויות לפרויקט זה. <button class="small" onclick="go('docs')">העלה במסמכים</button></div>`)
+   + (xp.length ? `<div class="notice warn">⚠ ${xp.length} עבודות חריגות ממתינות לתמחור ואישור המזמין — הביצוע שלהן לא נכלל בחשבון ללקוח עד לאישור.${S.user.role==="ceo"?" לחץ \"ערוך\" בשורה כדי לאשר.":""}</div>` : "")
    + table("boqT", ["סעיף","יחידה","כמות חוזית","בוצע (מאושר)","ממתין לאישור","יתרה","%",...(m?["מחיר מכירה","עלות ליח׳","שווי ביצוע"]:[]),""], rows,
      {actions:true, foot: m ? ["<b>סה״כ</b>","","","","","","",`היקף ${money(tq)}`,`עלות ${money(tc)}`,`<b>${money(tv)}</b>`,""] : null, empty:"אין סעיפים — הוסף סעיף ראשון"})
    + `<p class="muted">"בוצע" כולל רק כמויות שאושרו ע״י מהנדס (כמות פתיחה + דיווחי שטח מאושרים).</p>`;
@@ -364,8 +371,8 @@ function boq(){
 /* ============================== INDEX 13 · חשבונות ============================== */
 function billLinesFor(pid){
   const prev = DB.bills.filter(b => b.projectId===+pid && b.status!=="טיוטה").sort((a,b)=>b.id-a.id)[0];
-  return projectBoq(pid).map(b => { const pc = prev?.lines.find(l=>l.boqId===b.id)?.cum || 0; const cum = boqDone(b);
-    return {boqId:b.id,item:b.item,unit:b.unit,prevCum:pc,cum,price:b.sale}; });
+  return projectBoq(pid).filter(b => !isExtraPending(b)).map(b => { const pc = prev?.lines.find(l=>l.boqId===b.id)?.cum || 0; const cum = boqDone(b);
+    return {boqId:b.id,item:b.extra ? b.item + " (עבודה חריגה)" : b.item,unit:b.unit,prevCum:pc,cum,price:b.sale}; });
 }
 function billing(){
   const pid = curProject(false); if (!pid) return `<div class="card empty">אין פרויקטים</div>`;
@@ -375,13 +382,29 @@ function billing(){
   const bills = DB.bills.filter(b => canSeeProject(b.projectId)).sort((a,b)=>b.id-a.id);
   return head("טיוטת חשבון לתקופה הנוכחית", projectSelect("project", false))
    + (pend?`<div class="notice warn">⚠ יש ${pend} דיווחי שטח ממתינים לאישור בפרויקט זה — הם <b>לא</b> נכללים בחשבון עד שיאושרו.</div>`:"")
+   + (() => { const xs = projectBoq(pid).filter(b => isExtraPending(b) && boqDone(b) > 0); return xs.length ? `<div class="notice warn">⚠ עבודות חריגות שבוצעו וממתינות לאישור המזמין (לא נכללות בחשבון): ${xs.map(b => `<b>${esc(b.item)}</b> ${num(boqDone(b))} ${esc(b.unit)}`).join(" · ")} <button class="small" onclick="go('boq')">לתמחור ואישור</button></div>` : ""; })()
    + table("billPrev", ["סעיף","יחידה","מצטבר קודם","מצטבר נוכחי","כמות לתקופה","מחיר","סכום לתקופה"],
      lines.map(l => [esc(l.item), esc(l.unit), num(l.prevCum), num(l.cum), `<b>${num(l.cum-l.prevCum)}</b>`, money(l.price), money((l.cum-l.prevCum)*l.price)]),
      {foot:["<b>סה״כ לתקופה (לפני מע״מ)</b>","","","","","",`<b>${money(total)}</b>`]})
    + `<div class="actions" style="margin:12px 0">${can("billing") ? (draft ? `<span class="muted">קיימת טיוטה (#${draft.id}) לפרויקט זה</span> <button onclick="viewBill(${draft.id})">פתח טיוטה</button>` : `<button class="dark" ${total<=0?"disabled":""} onclick="createBill(${pid})">הפק חשבון מהכמויות המאושרות</button>`) : ""}<button class="ghost" onclick="exportTable('billPrev','חשבון-טיוטה')">⬇ Excel</button></div>`
    + head("חשבונות שהופקו", "", "billsT", "חשבונות")
    + table("billsT", ["מס׳","פרויקט","תקופה","תאריך","סכום","סטטוס","פעולות"], bills.map(b => [b.id, pname(b.projectId), b.period, fmtDate(b.date), money(b.total), st(b.status),
-      `<div class="actions"><button class="small" onclick="viewBill(${b.id})">הצג / הדפס</button>${can("billing")&&b.status==="טיוטה"?`<button class="small dark" onclick="setBillStatus(${b.id},'נשלח')">אשר ושלח</button><button class="small danger" onclick="delBill(${b.id})">מחק</button>`:""}${can("markPaid")&&b.status==="נשלח"?`<button class="small dark" onclick="setBillStatus(${b.id},'שולם')">סמן כשולם</button>`:""}</div>`]), {actions:true});
+      `<div class="actions"><button class="small" onclick="viewBill(${b.id})">הצג / הדפס</button>${can("billing")&&b.status==="טיוטה"?`<button class="small dark" onclick="setBillStatus(${b.id},'נשלח')">אשר ושלח</button><button class="small danger" onclick="delBill(${b.id})">מחק</button>`:""}${can("markPaid")&&b.status==="נשלח"?`<button class="small dark" onclick="setBillStatus(${b.id},'שולם')">סמן כשולם</button>`:""}</div>`]), {actions:true})
+   + subBillsSection();
+}
+/* ---------- חשבונות קבלני משנה (חודשי) ---------- */
+function monthsBack(n){ const out = []; const d = new Date(today()+"T12:00:00"); d.setDate(1); for (let i=0;i<n;i++){ out.push(isoLocal(d).slice(0,7)); d.setMonth(d.getMonth()-1); } return out; }
+function subBillsSection(){
+  const per = fv("subPeriod", monthKey());
+  const subs = DB.users.filter(u => u.role==="contractor");
+  const rows = subs.map(u => { const lines = subStatementLines(u.id, per), total = lines.reduce((a,l)=>a+l.total,0), x = lines.filter(l=>l.extra).reduce((a,l)=>a+l.total,0);
+    const sb = (DB.subbills||[]).find(s => s.userId===u.id && s.period===per);
+    const pendN = DB.reports.filter(r => r.userId===u.id && r.status==="pending").length;
+    return [`<b>${esc(u.name)}</b>`, lines.reduce((a,l)=>a+l.reports,0), money(total), x?`${money(x)} ${tag("חריגים","danger")}`:"-", pendN?`${pendN} ${tag("ממתינים","warning")}`:"-", sb ? st(sb.status) + (Math.abs(sb.total-total)>1 ? `<br><small class="danger-text">${sb.status==="שולם"?"עבודה נוספת אחרי התשלום":"השתנה מאז האישור"}: ${money(total-sb.total)}</small>` : "") : tag("טיוטה"),
+      `<div class="actions"><button class="small" onclick="viewSub(${u.id},'${per}')">הצג / הדפס</button>${can("billing") && total>0 && (!sb || sb.status==="טיוטה" || (sb.status==="אושר לתשלום" && Math.abs(sb.total-total)>1)) ? `<button class="small dark" onclick="approveSub(${u.id},'${per}')">אשר לתשלום</button>`:""}${can("markPaid") && sb?.status==="אושר לתשלום" ? `<button class="small dark" onclick="paySub(${sb.id})">סמן כשולם</button>`:""}</div>`]; });
+  return head("חשבונות קבלני משנה — לפי חודש", `<select class="filter" onchange="setFilter('subPeriod',this.value)">${optionList(monthsBack(6).map(m=>[m,m]), per)}</select>`, "subT", "חשבונות-קבלנים-"+per)
+   + table("subT", ["קבלן","דיווחים מאושרים","סה״כ לתשלום (לפני מע״מ)","מתוכם חריגים","ממתין לאישור מהנדס","סטטוס",""], rows, {actions:true, empty:"אין קבלני משנה במערכת"})
+   + `<p class="muted">החשבון לכל קבלן נבנה אוטומטית מכל הדיווחים שלו שאושרו ע״י מהנדס בחודש, לפי "מחיר לקבלן" בכל סעיף בכתב הכמויות (או העלות אם לא הוגדר). עבודות חריגות מסומנות בנפרד.</p>`;
 }
 
 /* ============================== INDEX 14 · כספים ורווחיות ============================== */

@@ -195,3 +195,11 @@ h4{margin:14px 0 6px}
 .ghost-dark{background:#fff;color:#17202a;border:2px solid #17202a}
 #bootstrap h3{margin:16px 0 4px}
 @media(max-width:760px){.sync{font-size:11px;padding:4px 7px}}
+
+/* V3.4 — חיפוש סעיפים במשימה / עבודה חריגה */
+.sug{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:260px;overflow:auto}
+.sug-item{text-align:right;background:#f4f7fb;border:1px solid #e1e7ef;font-weight:600;padding:9px 12px}
+.sug-item:hover{background:#e8eef7}
+.sug-extra{background:#fff4e5;border-color:#f5c27a;color:#7a4a00}
+.extra-box{margin-top:8px;padding:10px;border:1px dashed #f5c27a;border-radius:12px;background:#fffaf2}
+.boq-file{padding:10px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc}
