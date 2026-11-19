@@ -2,7 +2,7 @@
 /* =========================================================================
    INDIX V3.1 — מפרט 1598 — ליבת המערכת: נתונים, הרשאות, עזרים, AI
    ========================================================================= */
-const APP_VERSION = "V3.2 — מפרט 1598";
+const APP_VERSION = "V3.3 — מפרט 1598";
 const DB_KEY = "indix_v3_db", SESSION_KEY = "indix_session", DB_VER = 3;
 
 const MODULES = [
@@ -91,7 +91,27 @@ function today(){ return isoLocal(); }
 function addDays(n, base){ const d = base ? new Date(base) : new Date(); d.setDate(d.getDate()+n); return isoLocal(d); }
 function monthKey(d){ return (d||today()).slice(0,7); }
 
+/* חברת ההדגמה (js/demo-data.js) — התאריכים מוזזים בשבועות שלמים כך שהנתונים תמיד "עדכניים" */
+function demoSeed(){
+  const D = window.INDIX_DEMO, db = JSON.parse(JSON.stringify(D.db));
+  const diff = Math.round((new Date(today()+"T12:00:00") - new Date(D.ref+"T12:00:00"))/864e5), delta = Math.floor(diff/7)*7;
+  const shift = v => {
+    if (typeof v === "string"){
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return addDays(delta, v+"T12:00:00");
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return new Date(Date.parse(v) + delta*864e5).toISOString();
+      return v;
+    }
+    if (Array.isArray(v)) return v.map(shift);
+    if (v && typeof v === "object"){ for (const k of Object.keys(v)) if (!["photo","img","signature","file","data"].includes(k)) v[k] = shift(v[k]); }
+    return v;
+  };
+  if (delta) shift(db);
+  db.bills.forEach(b => { b.period = b.date.slice(0,7); });
+  db.ver = DB_VER; db.seq = Math.max(db.seq||0, 5000);
+  return db;
+}
 function seed(){
+  if (window.INDIX_DEMO) return demoSeed();
   const db = { ver:DB_VER, seq:1000, settings:{ company:"צ.ב הנדסת מערכות" },
     users:[], projects:[], boq:[], tasks:[], reports:[], daily:[], plans:[], stock:[], movements:[],
     suppliers:[], requests:[], bills:[], tenders:[], meetings:[], docs:[], notes:[], audit:[] };
@@ -205,7 +225,9 @@ function demoPlanSVG(){
 
 function load(){
   try { DB = JSON.parse(localStorage.getItem(DB_KEY)); } catch(e){ DB = null; }
-  if (!DB || DB.ver !== DB_VER){ DB = seed(); save(); }
+  // גרסת הדגמה חדשה נטענת פעם אחת (מחליפה נתוני הדגמה ישנים במכשיר)
+  const demoFlag = window.INDIX_DEMO ? "indix_demo_loaded_" + window.INDIX_DEMO.ref : null;
+  if (!DB || DB.ver !== DB_VER || (demoFlag && !localStorage.getItem(demoFlag))){ DB = seed(); save(); if (demoFlag) localStorage.setItem(demoFlag, "1"); }
 }
 function save(){
   if (typeof CLOUD !== "undefined" && CLOUD.enabled){ CLOUD.cache(); CLOUD.schedule(); return true; }
@@ -346,7 +368,7 @@ function aiFindings(){
     if (s.budget && s.budgetUse > s.progress + 8) add("high",`סיכון לחריגת תקציב — ${p.name}`,`נוצל ${s.budgetUse}% מתקציב העלות מול ${s.progress}% ביצוע`,"finance",M);
     if (s.executed && s.margin < 20) add("mid",`רווחיות נמוכה — ${p.name}`,`שיעור רווח גולמי ${s.margin}%`,"finance",M);
     const last = DB.reports.filter(r=>r.projectId===p.id).sort((a,b)=>b.at.localeCompare(a.at))[0];
-    if (!last || (Date.now()-new Date(last.at))/864e5 > 7) add("mid",`אין דיווחי שטח 7 ימים — ${p.name}`,"בדוק אם העבודה בפרויקט נעצרה","daily",M);
+    if (p.status==="פעיל" && (!p.start || p.start <= addDays(-7)) && (!last || (Date.now()-new Date(last.at))/864e5 > 7)) add("mid",`אין דיווחי שטח 7 ימים — ${p.name}`,"בדוק אם העבודה בפרויקט נעצרה","daily",M);
     if (p.end && p.end < addDays(30) && s.progress < 85) add("high",`צפי איחור — ${p.name}`,`נותרו פחות מ-30 יום לסיום ו-${s.progress}% ביצוע`,"progress",M);
     projectBoq(p.id).forEach(b => { if (boqDone(b) > b.qty) add("high",`ביצוע מעל הכמות החוזית — ${p.name}`,`${b.item}: בוצע ${num(boqDone(b))} מתוך ${num(b.qty)} — נדרשת הגדלת כמויות מול המזמין`,"boq",M); });
   });

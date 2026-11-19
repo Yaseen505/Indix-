@@ -34,9 +34,10 @@ function openProject(id){
    <div class="actions">${link("tasks","✅ משימות")}${link("plans","📐 תוכניות")}${link("fieldAI","📸 שטח")}${link("daily","📋 יומן")}${link("boq","📑 כתב כמויות")}${link("billing","💰 חשבונות")}${link("purchasing","🛒 רכש")}${link("docs","📄 מסמכים")}${link("meetings","📅 פגישות")}</div>
    ${can("manageProjects")?`<hr><button class="dark" onclick="openProjectForm(${p.id})">ערוך פרויקט</button>`:""}`, true);
 }
+function defaultManager(){ if (S.user.role==="engineer") return S.user.id; return (DB.users.find(u => u.role==="engineer" && u.active) || S.user).id; }
 function openProjectForm(id){
   if (!guard("manageProjects")) return;
-  const p = id ? P(id) : {name:"",client:"",budget:"",status:"פעיל",managerId:S.user.role==="engineer"?S.user.id:2,lat:"",lng:"",start:today(),end:addDays(180)};
+  const p = id ? P(id) : {name:"",client:"",budget:"",status:"פעיל",managerId:defaultManager(),lat:"",lng:"",start:today(),end:addDays(180)};
   const engs = DB.users.filter(u => ["engineer","ceo"].includes(u.role) && u.active).map(u => [u.id,u.name]);
   openModal(`<h2>${id?"עריכת פרויקט":"פרויקט חדש"}</h2><div class="form-grid">
    <div><label>שם פרויקט *</label><input id="np_name" value="${esc(p.name)}"></div><div><label>לקוח / מזמין *</label><input id="np_client" value="${esc(p.client)}"></div>
@@ -130,6 +131,7 @@ function openTaskForm(id, preset = {}){
    ${id?`<div><label>סטטוס</label><select id="tk_st">${optionList(["חדש","בביצוע","ממתין לאישור","הושלם"].map(x=>[x,x]),t.status)}</select></div><div></div>`:""}
    <div class="full"><label>הוראות לעובד</label><textarea id="tk_notes" rows="2">${esc(t.notes)}</textarea></div>
    <button class="primary full" onclick="saveTask(${id||""})">${id?"שמור":"צור משימה ושלח לעובד"}</button></div>`);
+  S.draft.editTask = id || null;
   taskFormDeps(t.boqId, t.assigneeId);
   S.draft.fromMeeting = preset.fromMeeting || null;
 }
@@ -138,19 +140,33 @@ function taskFormDeps(boqSel, aSel){
   $("tk_b").innerHTML = projectBoq(pid).map(b => `<option value="${b.id}" ${b.id===+boqSel?"selected":""}>${esc(b.item)} (${esc(b.unit)})</option>`).join("") || `<option value="">אין סעיפים — הוסף בכתב הכמויות</option>`;
   const people = DB.users.filter(u => u.active && (["worker","contractor","engineer"].includes(u.role)) && (u.projects==="all" || u.projects.includes(pid)));
   $("tk_a").innerHTML = people.map(u => `<option value="${u.id}" ${u.id===+aSel?"selected":""}>${esc(u.name)} — ${ROLES[u.role]}</option>`).join("");
-  const upd = () => { const b = B(val("tk_b")); $("tk_rem").textContent = b ? `יתרה בסעיף: ${num(b.qty - boqDone(b))} ${b.unit}` : ""; };
+  const upd = () => { const b = B(val("tk_b")); $("tk_rem").textContent = b ? `יתרה פנויה בסעיף: ${num(Math.max(0, boqFree(b.id, S.draft.editTask)))} ${b.unit} (מתוך ${num(b.qty)})` : ""; };
   $("tk_b").onchange = upd; upd();
 }
 function saveTask(id){
   if (!guard("createTask")) return;
   const d = {projectId:+val("tk_p"), boqId:+val("tk_b"), title:val("tk_title"), qty:nval("tk_qty"), assigneeId:+val("tk_a"), location:val("tk_loc"), due:val("tk_due"), notes:val("tk_notes")};
   if (!req(d.boqId, "יש לבחור סעיף מכתב הכמויות") || !req(d.title, "יש להזין תיאור") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0") || !req(d.assigneeId, "יש לבחור אחראי")) return;
+  const free = boqFree(d.boqId, id);
+  if (d.qty > free + 0.001){
+    const b = B(d.boqId), msg = `הכמות (${num(d.qty)}) גדולה מהיתרה הפנויה בסעיף "${b.item}" (${num(Math.max(0,free))} ${b.unit} — אחרי משימות פתוחות וביצוע מאושר)`;
+    if (S.user.role !== "ceo") return toast(msg + ". יש להגדיל את הכמות בכתב הכמויות (באישור המזמין) או להקטין את המשימה.", "danger");
+    if (!confirm(msg + ".\nליצור בכל זאת? (חריגה מהחוזה — יש לתאם עם המזמין)")) return;
+    audit("חריגה מכתב כמויות במשימה", `${d.title}: ${d.qty} מעל ${Math.max(0,free)}`);
+  }
   if (id){ const t = T(id); const prevA = t.assigneeId; Object.assign(t, d, {status:val("tk_st")||t.status}); audit("עריכת משימה", d.title);
     if (prevA !== d.assigneeId) notify(`שויכה אליך משימה: ${d.title}`, {userId:d.assigneeId, module:"tasks"}); }
   else { const t = {id:nid(), ...d, status:"חדש", createdBy:S.user.id}; DB.tasks.push(t); audit("יצירת משימה", `${d.title} → ${U(d.assigneeId)?.name}`);
     notify(`משימה חדשה: ${d.title} (${P(d.projectId)?.name})`, {userId:d.assigneeId, module:"tasks"});
     if (S.draft.fromMeeting){ const [mid,i] = S.draft.fromMeeting; const m = DB.meetings.find(x=>x.id===mid); if (m) m.decisions[i].taskId = t.id; } }
   closeModal(); refresh(); toast(id ? "המשימה עודכנה" : "המשימה נוצרה ונשלחה לעובד");
+}
+/* יתרה פנויה בסעיף: כמות חוזית פחות ביצוע מאושר ופחות יתרות של משימות פתוחות אחרות */
+function boqFree(boqId, exceptTaskId){
+  const b = B(boqId); if (!b) return 0;
+  const reserved = DB.tasks.filter(t => t.boqId===b.id && t.id!==exceptTaskId && t.status!=="הושלם").reduce((a,t) => a + Math.max(0, t.qty - taskDone(t)), 0);
+  const ownDone = exceptTaskId && T(exceptTaskId) ? taskDone(T(exceptTaskId)) : 0;
+  return b.qty - boqDone(b) - reserved + ownDone;
 }
 function delTask(id){
   if (!guard("createTask")) return; const t = T(id);
@@ -182,6 +198,8 @@ function submitReport(){
   if (!guard("fieldReport")) return;
   const t = T(val("rf_task")), qty = nval("rf_qty");
   if (!req(t, "יש לבחור משימה") || !req(qty > 0, "יש להזין כמות שבוצעה")) return;
+  const left = t.qty - taskDone(t) - taskPending(t);
+  if (!req(qty <= left + 0.001, left > 0 ? `הכמות גבוהה מהיתרה במשימה (${num(left)} ${B(t.boqId)?.unit||""}). אם בוצע יותר — בקש מהמהנדס להגדיל את המשימה.` : "המשימה כבר דווחה במלואה וממתינה לאישור מהנדס")) return;
   const r = {id:nid(), taskId:t.id, boqId:t.boqId, projectId:t.projectId, userId:S.user.id, date:today(), at:new Date().toISOString(), qty, qtyReported:qty,
     stage:val("rf_stage"), note:val("rf_note"), photo:S.draft.photo||null, bright:S.draft.bright??null, gps:S.draft.gps||null, status:"pending"};
   const a = analyzeReport(r);
@@ -207,13 +225,16 @@ function openApprove(id){
    <ul>${a.flags.map(f=>`<li class="fl-${f[0]}">${esc(f[1])}</li>`).join("") || "<li>לא נמצאו חריגות</li>"}</ul><small class="muted">ההחלטה הסופית היא של המהנדס.</small></div>
    ${canA?`<div class="form-grid"><div><label>כמות לאישור</label><input id="ap_qty" type="number" step="any" value="${r.qtyReported}"></div><div><label>הערה לעובד</label><input id="ap_note" placeholder="חובה בדחייה"></div>
    <button class="primary" onclick="decideReport(${r.id},true)">✓ אשר — עדכן יומן, התקדמות וכתב כמויות</button><button class="danger" onclick="decideReport(${r.id},false)">✗ דחה</button></div>`
-   : r.decisionNote?`<p class="muted">הערת מהנדס: ${esc(r.decisionNote)}</p>`:""}`, true);
+   : r.decisionNote?`<p class="muted">הערת מהנדס: ${esc(r.decisionNote)}</p>`:""}
+   ${r.status==="pending"&&r.userId===S.user.id&&!canA?`<button class="danger" onclick="cancelReport(${r.id})">בטל את הדיווח</button>`:""}`, true);
 }
 function decideReport(id, ok){
   if (!guard("approveReport")) return;
   const r = DB.reports.find(x => x.id===id), t = T(r.taskId), note = val("ap_note");
   if (ok){
     const q = nval("ap_qty"); if (!req(q > 0, "כמות לאישור חייבת להיות גדולה מ-0")) return;
+    if (t){ const room = t.qty - taskDone(t) - DB.reports.filter(x => x.taskId===t.id && x.status==="pending" && x.id!==r.id).reduce((a,x)=>a+x.qty,0);
+      if (!req(q <= room + 0.001, `אישור ${num(q)} יחרוג מכמות המשימה (נותרו ${num(Math.max(0,room))}). אשר כמות קטנה יותר או הגדל קודם את המשימה.`)) return; }
     r.qty = q; r.status = "approved"; r.approvedBy = S.user.id; r.decidedAt = new Date().toISOString(); r.decisionNote = note || (q!==r.qtyReported ? `הכמות תוקנה מ-${r.qtyReported} ל-${q}` : "");
     if (t) t.status = taskDone(t) >= t.qty ? "הושלם" : (taskPending(t) ? "ממתין לאישור" : "בביצוע");
     audit("אישור דיווח שטח", `#${id} ${t?.title}: ${q}`);
@@ -406,7 +427,8 @@ function viewRequest(id){
    <tr><td>מבקש</td><td>${uname(r.requestedBy)} · ${fmtDate(r.date)}</td></tr><tr><td>סיבה</td><td>${esc(r.reason||"-")}</td></tr>
    ${r.over?`<tr><td>חריגה</td><td class="danger-text">${esc(r.overMsg)}</td></tr>`:""}${r.approvedBy?`<tr><td>החלטת מנכ״ל</td><td>${uname(r.approvedBy)}${r.rejectReason?" — "+esc(r.rejectReason):""}</td></tr>`:""}
    ${sup?`<tr><td>ספק</td><td>${esc(sup.name)} · ${money(r.price)} ליח׳ · ${money(r.price*r.qty)}</td></tr>`:""}${r.eta?`<tr><td>צפי אספקה</td><td>${fmtDate(r.eta)}</td></tr>`:""}
-   ${r.suppliedAt?`<tr><td>נקלט</td><td>${fmtDate(r.suppliedAt)} · ${num(r.receivedQty??r.qty)} ע״י ${uname(r.receivedBy)}</td></tr>`:""}</tbody></table>`);
+   ${r.suppliedAt?`<tr><td>נקלט</td><td>${fmtDate(r.suppliedAt)} · ${num(r.receivedQty??r.qty)} ע״י ${uname(r.receivedBy)}</td></tr>`:""}</tbody></table>
+   <div class="actions">${sup?`<button class="dark" onclick="printPO(${id})">🖨 הזמנת רכש לספק</button>`:""}${[REQ.WAIT_CEO,REQ.APPROVED].includes(r.status)&&(r.requestedBy===S.user.id||["ceo","purchasing"].includes(S.user.role))?`<button class="danger" onclick="cancelRequest(${id})">בטל דרישה</button>`:""}</div>`);
 }
 
 /* ------------------------------ ספקים ------------------------------ */
@@ -519,7 +541,9 @@ function setTenderStatus(id, s){ if (!guard("tenders")) return; const t = DB.ten
 function tenderToProject(id){
   if (!guard("manageProjects")) return;
   const t = DB.tenders.find(x => x.id===id), c = tenderCalc(t);
-  const p = {id:nid(), name:t.name, client:t.client, status:"תכנון", managerId:S.user.role==="engineer"?S.user.id:2, lat:null, lng:null, start:today(), end:addDays(180), budget:Math.round(c.cost)};
+  if (t.projectId && P(t.projectId)){ S.filters.project = String(t.projectId); go("boq"); return toast("כבר נוצר פרויקט מהמכרז הזה","warning"); }
+  if (DB.projects.some(p => p.name === t.name)) return toast("כבר קיים פרויקט בשם הזה — שנה את שם המכרז או את שם הפרויקט הקיים","danger");
+  const p = {id:nid(), name:t.name, client:t.client, status:"תכנון", managerId:defaultManager(), lat:null, lng:null, start:today(), end:addDays(180), budget:Math.round(c.cost)};
   DB.projects.push(p);
   t.lines.forEach(l => { const uc = l.sub>0?l.sub:l.cost; DB.boq.push({id:nid(), projectId:p.id, type:l.type, item:WORK[l.type].name, unit:WORK[l.type].unit, qty:l.qty, base:0, sale:Math.round(uc*(1+t.markup/100)*100)/100, cost:uc}); });
   t.projectId = p.id; audit("פרויקט נוצר ממכרז", t.name); save();
@@ -638,6 +662,80 @@ function importBackup(input){
   fr.readAsText(f);
 }
 function resetDemo(){ if (CLOUD.enabled) return; if (!guard("admin") || !confirm("כל הנתונים יימחקו ויוחלפו בנתוני דוגמה. להמשיך?")) return; localStorage.removeItem(DB_KEY); localStorage.removeItem(SESSION_KEY); location.hash = ""; location.reload(); }
+
+
+/* ------------------------------ תוספות V3.3 ------------------------------ */
+/* ביטול דיווח שטח ע״י העובד (רק כל עוד לא נבדק) */
+function cancelReport(id){
+  const r = DB.reports.find(x => x.id===id); if (!r || r.status!=="pending") return;
+  if (r.userId!==S.user.id && !can("approveReport")) return toast("אין לך הרשאה","danger");
+  if (!confirm("לבטל את הדיווח?")) return;
+  DB.reports = DB.reports.filter(x => x.id!==id);
+  const t = T(r.taskId); if (t && t.status==="ממתין לאישור" && !taskPending(t)) t.status = taskDone(t) > 0 ? "בביצוע" : (t.startedAt ? "בביצוע" : "חדש");
+  audit("ביטול דיווח שטח", `#${id}`); closeModal(); refresh(); toast("הדיווח בוטל");
+}
+/* ביטול דרישת רכש לפני הזמנה */
+function cancelRequest(id){
+  const r = DB.requests.find(x => x.id===id); if (!r || ![REQ.WAIT_CEO,REQ.APPROVED].includes(r.status)) return;
+  if (r.requestedBy!==S.user.id && !["ceo","purchasing"].includes(S.user.role)) return toast("רק המבקש, הרכש או המנכ״ל יכולים לבטל","danger");
+  if (!confirm(`לבטל את דרישת רכש ${id}?`)) return;
+  r.status = REQ.REJECTED; r.rejectReason = "בוטלה ע״י " + S.user.name; r.cancelled = true;
+  audit("ביטול דרישת רכש", String(id)); closeModal(); refresh(); toast("הדרישה בוטלה");
+}
+/* הזמנת רכש להדפסה / שליחה לספק */
+function printPO(id){
+  const r = DB.requests.find(x => x.id===id), sup = DB.suppliers.find(s => s.id===r.supplierId);
+  if (!sup) return toast("לדרישה זו עוד לא נבחר ספק","danger");
+  printHTML(printHeader(`הזמנת רכש מס׳ ${id}`) + `<p>לכבוד: <b>${esc(sup.name)}</b>${sup.contact?` · ${esc(sup.contact)}`:""}${sup.phone?` · ${esc(sup.phone)}`:""}</p>
+   <p>פרויקט: <b>${pname(r.projectId)}</b> · תאריך הזמנה: ${fmtDate(r.orderedAt||r.date)} · אספקה עד: ${fmtDate(r.eta||r.needBy)}</p>
+   <table class="mini bill"><thead><tr><th>פריט</th><th>יח׳</th><th>כמות</th><th>מחיר ליח׳</th><th>סה״כ</th></tr></thead>
+   <tbody><tr><td>${esc(matName(r.mat))}</td><td>${esc(MATERIALS[r.mat]?.unit||"")}</td><td>${num(r.qty)}</td><td>${money(r.price)}</td><td>${money(r.price*r.qty)}</td></tr></tbody>
+   <tfoot><tr><td colspan="4">סה״כ לפני מע״מ</td><td>${money(r.price*r.qty)}</td></tr><tr><td colspan="4"><b>כולל מע״מ 18%</b></td><td><b>${money(r.price*r.qty*1.18)}</b></td></tr></tfoot></table>
+   <p>כתובת אספקה: מחסן החברה · נא לצרף תעודת משלוח עם מספר ההזמנה.</p><div class="sign-line">חתימת מורשה: ____________</div>`);
+}
+/* עריכת פריט מלאי וספירת מלאי */
+function openStockEdit(mat){
+  if (!guard("stockMove")) return;
+  const s = stockOf(mat);
+  openModal(`<h2>${esc(matName(mat))} — עריכה וספירת מלאי</h2><div class="form-grid">
+   <div><label>מלאי מינימום</label><input id="se_min" type="number" step="any" value="${s.min}"></div><div><label>מיקום</label><input id="se_loc" value="${esc(s.location||"")}"></div>
+   <div><label>כמות לפי המערכת</label><input value="${s.qty}" disabled></div><div><label>כמות בספירה בפועל</label><input id="se_cnt" type="number" step="any" placeholder="השאר ריק אם לא נספר"></div>
+   <div class="full"><label>הערה (חובה אם יש הפרש בספירה)</label><input id="se_note"></div>
+   <button class="primary full" onclick="saveStockEdit('${mat}')">שמור</button></div>`);
+}
+function saveStockEdit(mat){
+  if (!guard("stockMove")) return;
+  const s = stockOf(mat), min = nval("se_min"), cnt = val("se_cnt");
+  if (!req(min >= 0, "מינימום לא יכול להיות שלילי")) return;
+  s.min = min; s.location = val("se_loc") || s.location;
+  if (cnt !== ""){
+    const c = +cnt, diff = c - s.qty;
+    if (!req(c >= 0, "כמות בספירה לא יכולה להיות שלילית")) return;
+    if (diff){
+      if (!req(val("se_note"), "יש לכתוב הסבר להפרש בספירה")) return;
+      DB.movements.push({id:nid(), at:new Date().toISOString(), type:diff>0?"in":"out", mat, qty:Math.abs(diff), projectId:null, toUserId:null, userId:S.user.id, note:`תיקון ספירת מלאי: ${val("se_note")}`, signature:null, img:null, refReq:null, adjust:true});
+      s.qty = c; notify(`ספירת מלאי: ${matName(mat)} תוקן ב-${num(diff)} (${val("se_note")})`, {roles:["ceo"], module:"warehouse"});
+    }
+  }
+  audit("עדכון פריט מלאי", `${matName(mat)} · מינימום ${min}${cnt!==""?` · ספירה ${cnt}`:""}`); closeModal(); refresh(); toast("נשמר");
+}
+/* שינוי קוד כניסה אישי (מצב מקומי) */
+function openMyPin(){
+  if (CLOUD.enabled) return toast("במצב ענן משנים סיסמה דרך 'שכחתי סיסמה' במסך הכניסה","warning");
+  openModal(`<h2>שינוי קוד כניסה</h2><div class="form-grid"><div><label>קוד נוכחי</label><input id="mp_old" type="password" inputmode="numeric"></div><div><label>קוד חדש (4-8 ספרות)</label><input id="mp_new" type="password" inputmode="numeric"></div><button class="primary full" onclick="saveMyPin()">שמור</button></div>`);
+}
+function saveMyPin(){
+  if (!req(val("mp_old") === String(S.user.pin), "הקוד הנוכחי שגוי") || !req(/^\d{4,8}$/.test(val("mp_new")), "קוד חדש חייב להיות 4-8 ספרות")) return;
+  S.user.pin = val("mp_new"); audit("שינוי קוד אישי"); closeModal(); save(); toast("הקוד עודכן");
+}
+/* התחלת מערכת ריקה לעבודה אמיתית (מצב מקומי) */
+function startEmpty(){
+  if (CLOUD.enabled || !guard("admin")) return;
+  const name = prompt("שם החברה למערכת החדשה:", "צ.ב הנדסת מערכות"); if (!name) return;
+  if (!confirm("כל נתוני ההדגמה יימחקו ותתחיל מערכת ריקה עם מנכ״ל בלבד. מומלץ לגבות קודם. להמשיך?")) return;
+  const me = {...S.user, projects:"all"}; DB = emptyDB(name); DB.users = [{...me, id:1}];
+  audit("הקמת מערכת ריקה", name); save(); localStorage.setItem(SESSION_KEY, 1); location.hash = ""; location.reload();
+}
 
 /* ------------------------------ הפעלה ------------------------------ */
 function init(){

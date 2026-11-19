@@ -23,7 +23,7 @@ async function logout(){
 }
 function startApp(){
   $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden");
-  $("userBadge").innerHTML = `<b>${esc(S.user.name)}</b><br>${ROLES[S.user.role]}<br><span class="muted">${esc(DB.settings.company)}</span>`;
+  $("userBadge").innerHTML = `<b>${esc(S.user.name)}</b><br>${ROLES[S.user.role]}<br><span class="muted">${esc(DB.settings.company)}</span>${CLOUD.enabled?"":`<br><button class="small link" onclick="openMyPin()">🔑 שינוי קוד כניסה</button>`}`;
   $("dateNow").textContent = new Date().toLocaleDateString("he-IL");
   navigate(location.hash.slice(1) || "dashboard");
 }
@@ -301,8 +301,8 @@ function warehouse(){
   const acts = (can("stockMove")?`<button class="dark" onclick="openMove('in')">⬇ קליטה</button><button class="dark" onclick="openMove('out')">⬆ ניפוק לפרויקט</button>`:"") + (can("admin")?`<button onclick="openStockItem()">+ פריט</button>`:"");
   const rows = DB.stock.map(s => [esc(matName(s.mat)), `<b>${num(s.qty)}</b>`, num(s.min), MATERIALS[s.mat].unit, esc(s.location),
     s.qty < s.min ? tag("מתחת למינימום","danger") : tag("תקין","success"),
-    `<div class="actions">${can("createRequest")&&s.qty<s.min?`<button class="small" onclick="openRequest('${s.mat}')">+ דרישת רכש</button>`:""}</div>`]);
-  const mv = DB.movements.slice().sort((a,b)=>b.at.localeCompare(a.at)).slice(0,40).map(m => [fmtTime(m.at), m.type==="in"?tag("קליטה","success"):tag("ניפוק","warning"), esc(matName(m.mat)), num(m.qty),
+    `<div class="actions">${can("createRequest")&&s.qty<s.min?`<button class="small" onclick="openRequest('${s.mat}')">+ דרישת רכש</button>`:""}${can("stockMove")?`<button class="small" onclick="openStockEdit('${s.mat}')">ערוך / ספירה</button>`:""}</div>`]);
+  const mv = DB.movements.slice().sort((a,b)=>b.at.localeCompare(a.at)).slice(0,40).map(m => [fmtTime(m.at), m.adjust?tag("ספירה","info"):m.type==="in"?tag("קליטה","success"):tag("ניפוק","warning"), esc(matName(m.mat)), num(m.qty),
     m.type==="out" ? pname(m.projectId) + (m.toUserId?` ← ${uname(m.toUserId)}`:"") : "מחסן מרכזי", uname(m.userId), esc(m.note||""),
     m.signature ? `<button class="small" onclick="showSig(${m.id})">✍ צפה</button>` : "-"]);
   return `<div class="grid kpis">${kpi("סוגי פריטים", DB.stock.length)}${kpi("מתחת למינימום", low.length,"",low.length?"attn":"")}${kpi("משלוחים בדרך", toRecv.length)}${kpi("תנועות היום", DB.movements.filter(m=>m.at.slice(0,10)===today()).length)}</div>`
@@ -321,6 +321,7 @@ function purchasing(){
     if (r.status===REQ.WAIT_CEO && can("approveOver")) act.push(`<button class="small dark" onclick="ceoDecide(${r.id},true)">אשר חריגה</button><button class="small danger" onclick="ceoDecide(${r.id},false)">דחה</button>`);
     if (r.status===REQ.APPROVED && can("orderRequest")) act.push(`<button class="small dark" onclick="openOrder(${r.id})">בחר ספק והזמן</button>`);
     if (r.status===REQ.ORDERED && can("receive")) act.push(`<button class="small dark" onclick="openReceive(${r.id})">קלוט במחסן</button>`);
+    if (r.status===REQ.ORDERED || r.status===REQ.SUPPLIED) act.push(`<button class="small" onclick="printPO(${r.id})">🖨 הזמנה</button>`);
     act.push(`<button class="small" onclick="viewRequest(${r.id})">פרטים</button>`);
     const row = [r.id, fmtDate(r.date), pname(r.projectId), esc(matName(r.mat)), `${num(r.qty)} ${MATERIALS[r.mat]?.unit||""}`,
       sup ? `${esc(sup.name)}<br><small>${money(r.price)} ליח׳ · סה״כ ${money(r.price*r.qty)}</small>` : "-", uname(r.requestedBy),
@@ -479,7 +480,7 @@ function admin(){
    + head("Audit Log — פעולות קריטיות", "", "auditT", "audit-log") + table("auditT", ["זמן","משתמש","תפקיד","פעולה","פרטים"], DB.audit.slice(0,150).map(a => [fmtTime(a.at), esc(a.user), ROLES[a.role]||"", esc(a.action), esc(a.detail)]))
    + `<div class="card"><h3>גיבוי ושחזור</h3><p class="muted">${CLOUD.enabled?"הנתונים נשמרים בענן (Supabase) ומסונכרנים בין כל המכשירים. גיבוי JSON הוא שכבת הגנה נוספת.":"כל הנתונים נשמרים כרגע בדפדפן של המכשיר הזה. מומלץ לגבות באופן קבוע."}</p><div class="actions">
      <button class="dark" onclick="exportBackup()">⬇ גיבוי מלא (JSON)</button><label class="file-btn">⬆ שחזור מגיבוי<input type="file" accept=".json,application/json" hidden onchange="importBackup(this)"></label>
-     ${CLOUD.enabled?"":`<button class="danger" onclick="resetDemo()">איפוס לנתוני דוגמה</button>`}</div></div>`;
+     ${CLOUD.enabled?"":`<button class="danger" onclick="resetDemo()">איפוס לנתוני ההדגמה</button><button class="danger" onclick="startEmpty()">🆕 התחל מערכת ריקה (לעבודה אמיתית)</button>`}</div></div>`;
 }
 
 const VIEWS = {dashboard,projects,plans,tasks,people,fieldAI,daily,progress,warehouse,purchasing,suppliers,boq,billing,finance,tenders,ai,alerts,docs,meetings,admin};
