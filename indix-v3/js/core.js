@@ -2,7 +2,7 @@
 /* =========================================================================
    INDIX V3.1 — מפרט 1598 — ליבת המערכת: נתונים, הרשאות, עזרים, AI
    ========================================================================= */
-const APP_VERSION = "V3.4 — מפרט 1598";
+const APP_VERSION = "V3.5 — מפרט 1598";
 const DB_KEY = "indix_v3_db", SESSION_KEY = "indix_session", DB_VER = 3;
 
 const MODULES = [
@@ -100,7 +100,35 @@ function boqSearch(pid, q){
 }
 const isExtraPending = b => !!(b && b.extra && b.extraStatus !== EXTRA.OK);
 /* מחיר לקבלן משנה ליחידה */
-const subRate = b => b ? (b.sub != null && b.sub !== "" ? +b.sub : +b.cost || 0) : 0;
+const subRate = b => b && b.sub != null && b.sub !== "" ? +b.sub : 0;
+const SUB = { DRAFT:"טיוטה", ENG:"אושר ע״י מהנדס", OK:"אושר לתשלום", PAID:"שולם" };
+/* כמה מגיע לעובד/קבלן על דיווח (לפי "מחיר לביצוע" בסעיף) */
+function reportValue(r){ const b = B(r.boqId); return Math.round((r.qty||0) * subRate(b) * 100) / 100; }
+/* סיכום הכנסות לעובד/קבלן בחודש: מאושר, ממתין, היום, ובדיקת AI */
+function earnSummary(uid, period){
+  const reps = DB.reports.filter(r => r.userId===+uid && r.date.slice(0,7)===period);
+  const sum = f => Math.round(reps.filter(f).reduce((a,r)=>a+reportValue(r),0)*100)/100;
+  const noRate = [...new Set(reps.filter(r => r.status!=="rejected" && !subRate(B(r.boqId))).map(r => B(r.boqId)?.item).filter(Boolean))];
+  return { approved:sum(r=>r.status==="approved"), pending:sum(r=>r.status==="pending"), today:sum(r=>r.date===today() && r.status!=="rejected"),
+    rejected:reps.filter(r=>r.status==="rejected").length, days:new Set(reps.filter(r=>r.status!=="rejected").map(r=>r.date)).size, reports:reps.length, noRate };
+}
+/* בדיקת AI לחשבון: דיווחים בלי תמונה/GPS, מיקום רחוק, כמות חריגה ליום */
+function statementAudit(uid, period){
+  const reps = DB.reports.filter(r => r.userId===+uid && r.date.slice(0,7)===period && r.status==="approved");
+  const issues = [];
+  const noPhoto = reps.filter(r => !r.photo).length, noGps = reps.filter(r => !r.gps).length;
+  const far = reps.filter(r => { const d = distKm(r.gps, P(r.projectId)); return d != null && d > 2; }).length;
+  const heavy = reps.filter(r => { const b = B(r.boqId); const w = WORK[b?.type] || WORK.other; return r.qty > w.daily * 1.5; }).length;
+  const corrected = reps.filter(r => r.qtyReported !== r.qty).length;
+  if (noPhoto) issues.push(["mid", `${noPhoto} דיווחים בלי תמונה`]);
+  if (noGps) issues.push(["mid", `${noGps} דיווחים בלי GPS`]);
+  if (far) issues.push(["high", `${far} דיווחים ממיקום רחוק מהאתר`]);
+  if (heavy) issues.push(["mid", `${heavy} דיווחים עם כמות גבוהה מהנורמה ליום`]);
+  if (corrected) issues.push(["low", `${corrected} דיווחים שהכמות בהם תוקנה ע״י מהנדס (החשבון לפי הכמות המתוקנת)`]);
+  const dup = {}; reps.forEach(r => { const k = r.taskId+"|"+r.date; dup[k] = (dup[k]||0)+1; }); const dups = Object.values(dup).filter(n=>n>1).length;
+  if (dups) issues.push(["low", `${dups} ימים עם יותר מדיווח אחד לאותה משימה`]);
+  return {issues, checked:reps.length, ok: !issues.some(i => i[0]==="high")};
+}
 /* שורות חשבון קבלן משנה לחודש: רק כמויות שאושרו ע״י מהנדס */
 function subStatementLines(uid, period){
   const reps = DB.reports.filter(r => r.userId===+uid && r.status==="approved" && r.date.slice(0,7)===period);

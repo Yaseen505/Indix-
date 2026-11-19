@@ -49,12 +49,12 @@ function openProjectForm(id){
    <div class="full"><button type="button" class="small" onclick="getGPS().then(g=>{$('np_lat').value=g.lat;$('np_lng').value=g.lng;toast('המיקום הנוכחי הוזן')}).catch(e=>toast(e.message,'danger'))">📍 השתמש במיקום הנוכחי שלי (כשאני באתר)</button></div>
    ${id ? "" : `<div class="full boq-file"><label>📑 כתב כמויות / רשימת חומרים — צילום או קובץ *</label>
      <label class="file-btn">📷 צלם או בחר קובץ<input id="np_boq" type="file" accept="image/*,.pdf,.csv,.txt,.xlsx,.xls" hidden onchange="npBoqFile(this)"></label>
-     <div id="np_boq_info" class="muted small-text">חובה לצרף. קובץ CSV מאקסל (סעיף, יחידה, כמות, מחיר) — הסעיפים ייטענו אוטומטית. צילום/PDF נשמר במסמכי הפרויקט, ואת הסעיפים מזינים או מדביקים במסך כתב כמויות.</div></div>`}
+     <div id="np_boq_info" class="muted small-text">חובה לצרף. 🤖 ה-AI יקרא את הקובץ (צילום, אקסל או CSV) ויציג את כל הסעיפים לבדיקה — אחר כך המהנדס ימצא כל סעיף במשימות לפי מילה.</div></div>`}
    <button class="primary full" onclick="saveProject(${id||""})">שמור פרויקט</button></div>`);
 }
 function npBoqFile(input){
   const f = input.files[0]; if (!f) return;
-  $("np_boq_info").innerHTML = `✓ <b>${esc(f.name)}</b> (${num(Math.round(f.size/1024))} KB)` + (/\.(csv|txt)$/i.test(f.name) ? " — הסעיפים ייקראו מהקובץ" : "");
+  $("np_boq_info").innerHTML = `✓ <b>${esc(f.name)}</b> (${num(Math.round(f.size/1024))} KB) — ה-AI יקרא את הסעיפים אחרי השמירה`;
 }
 async function saveProject(id){
   if (!guard("manageProjects")) return;
@@ -70,7 +70,6 @@ async function saveProject(id){
     const p = {id:nid(), ...d}; DB.projects.push(p); audit("יצירת פרויקט", d.name); S.filters.project = String(p.id);
     let added = 0, data = null;
     try {
-      if (/\.(csv|txt)$/i.test(boqFile.name)){ const txt = await boqFile.text(); added = importBoqText(p.id, txt).length; }
       if (boqFile.type.startsWith("image/")) data = (await readImage(boqFile, 1600)).data;
       else if (boqFile.size <= 1.5*1024*1024) data = await readFileData(boqFile);
     } catch(e){}
@@ -78,7 +77,8 @@ async function saveProject(id){
     audit("צירוף כתב כמויות לפרויקט", boqFile.name);
     notify(`פרויקט חדש: ${d.name} (${U(S.user.id)?.name})`, {roles:["ceo","engineer"], module:"projects"});
     closeModal(); save(); S.filters.project = String(p.id); go("boq");
-    return toast(added ? `הפרויקט נוצר ו-${added} סעיפים נטענו מהקובץ — בדוק אותם` : "הפרויקט נוצר וכתב הכמויות נשמר במסמכים — עכשיו הזן או הדבק את הסעיפים", "success");
+    toast("הפרויקט נוצר וכתב הכמויות נשמר במסמכים — ה-AI קורא את הסעיפים…");
+    return aiReadBoq(p.id, [boqFile]);
   }
   closeModal(); refresh(); toast("הפרויקט עודכן");
 }
@@ -278,7 +278,9 @@ function submitReport(){
   notify(`דיווח שטח חדש מ${S.user.name}: ${t.title} — ${num(qty)} (AI ${a.score})`, {roles:["engineer","ceo"], module:"fieldAI"});
   if (!save()){ DB.reports.pop(); return; }
   const gps = S.draft.gps; S.draft = {gps}; S.filters.rstatus = isFieldRole() ? "all" : S.filters.rstatus;
-  render(); toast(`הדיווח נשלח לאישור מהנדס · AI: ${a.rec}`);
+  render();
+  const val_ = reportValue(r), es = earnSummary(S.user.id, monthKey());
+  toast(`הדיווח נשלח לאישור מהנדס · AI: ${a.rec}` + (val_ ? ` · 💰 על הדיווח הזה מגיע לך ${money(val_)} (אחרי אישור). החודש: ${money(es.approved)} מאושר + ${money(es.pending)} ממתין` : ""));
 }
 function openApprove(id){
   const r = DB.reports.find(x => x.id===id); if (!r) return;
@@ -565,7 +567,7 @@ function openBoqLine(id, pid){
    <div><label>יחידה</label><input id="bq_u" value="${esc(b.unit)}"></div><div class="full"><label>תיאור הסעיף *</label><input id="bq_i" value="${esc(b.item||WORK[b.type].name)}"></div>
    <div><label>כמות חוזית *</label><input id="bq_q" type="number" step="any" value="${esc(b.qty)}"></div><div><label>כמות פתיחה (בוצע לפני המערכת)</label><input id="bq_b" type="number" step="any" value="${esc(b.base)}"></div>
    <div><label>מחיר מכירה ליח׳ (ללקוח) *</label><input id="bq_s" type="number" step="any" value="${esc(b.sale)}"></div><div><label>עלות ליח׳ *</label><input id="bq_c" type="number" step="any" value="${esc(b.cost)}"></div>
-   <div><label>מחיר לקבלן משנה ליח׳</label><input id="bq_sub" type="number" step="any" value="${esc(b.sub ?? "")}" placeholder="ריק = לפי העלות"><small class="muted">משמש לחשבון החודשי של הקבלן</small></div><div></div>
+   <div><label>מחיר לביצוע ליח׳ (לעובד / קבלן)</label><input id="bq_sub" type="number" step="any" value="${esc(b.sub ?? "")}" placeholder="לא הוגדר"><small class="muted">לפיו ה-AI מחשב כמה מגיע לעובד או לקבלן על כל דיווח</small></div><div></div>
    ${b.extra ? `<div class="full notice ${isExtraPending(b)?"warn":""}">⚠ <b>עבודה חריגה</b> — לא הייתה בכתב הכמויות המקורי. נפתחה ע״י ${uname(b.extraBy)} ב-${fmtDate(b.extraAt)}${b.extraNote?` · ${esc(b.extraNote)}`:""}.<br>סטטוס: <b>${esc(b.extraStatus)}</b>${isExtraPending(b)?" — לא נכלל בחשבון ללקוח עד לאישור.":""}
      ${isExtraPending(b) && S.user.role==="ceo" ? `<label class="chk"><input type="checkbox" id="bq_xok"> המזמין אישר את החריג במחיר שלמעלה — לכלול בחשבונות</label>` : ""}</div>` : ""}
    <button class="primary full" onclick="saveBoqLine(${id||"null"},${b.projectId})">שמור</button>
@@ -781,33 +783,63 @@ function subHTML(uid, per){
   const u = U(uid), lines = subStatementLines(uid, per), total = lines.reduce((a,l)=>a+l.total,0);
   const pend = DB.reports.filter(r => r.userId===+uid && r.status==="pending");
   const sb = (DB.subbills||[]).find(s => s.userId===+uid && s.period===per);
-  return `<p>קבלן: <b>${esc(u?.name)}</b>${u?.phone?` · ${esc(u.phone)}`:""} · חודש: <b>${per}</b>${sb?` · ${st(sb.status)}`:""}</p>
+  return `<p>${ROLES[u?.role]||""}: <b>${esc(u?.name)}</b>${u?.phone?` · ${esc(u.phone)}`:""} · חודש: <b>${per}</b>${sb?` · ${st(sb.status)}`:""}</p>
   <table class="mini bill"><thead><tr><th>פרויקט</th><th>סעיף</th><th>יח׳</th><th>כמות מאושרת</th><th>מחיר ליח׳</th><th>סכום</th></tr></thead><tbody>
   ${lines.map(l => `<tr><td>${pname(l.projectId)}</td><td>${esc(l.item)}${l.extra?" "+tag("חריג","danger"):""}</td><td>${esc(l.unit)}</td><td>${num(l.qty)}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">אין עבודות מאושרות בחודש זה</td></tr>`}</tbody>
   <tfoot><tr><td colspan="5">סה״כ לפני מע״מ</td><td>${money(total)}</td></tr><tr><td colspan="5">מע״מ 18%</td><td>${money(total*0.18)}</td></tr><tr><td colspan="5"><b>סה״כ לתשלום</b></td><td><b>${money(total*1.18)}</b></td></tr></tfoot></table>
   ${pend.length ? `<p class="muted">⏳ ${pend.length} דיווחים נוספים ממתינים לאישור מהנדס — ייכנסו לחשבון אחרי האישור.</p>` : ""}
   <p class="muted">כולל רק עבודות שאושרו ע״י מהנדס. עבודות חריגות מסומנות ומשולמות לפי המחיר שנקבע לקבלן.</p>`;
 }
+function subDaysHTML(uid, per){
+  const reps = DB.reports.filter(r => r.userId===+uid && r.date.slice(0,7)===per).sort((a,b)=>a.date.localeCompare(b.date) || a.id-b.id);
+  if (!reps.length) return "";
+  const RS = {approved:"מאושר", pending:"ממתין", rejected:"נדחה"};
+  return `<h3>פירוט יומי</h3><div class="table-wrap"><table class="mini"><thead><tr><th>תאריך</th><th>פרויקט</th><th>סעיף</th><th>כמות</th><th>📷</th><th>📍</th><th>סטטוס</th><th>סכום</th></tr></thead><tbody>
+   ${reps.map(r => { const b = B(r.boqId); return `<tr class="${r.status==="rejected"?"muted":""}"><td>${fmtDate(r.date)}</td><td>${pname(r.projectId)}</td><td>${esc(b?.item||"-")}${b?.extra?" "+tag("חריג","danger"):""}</td><td>${num(r.qty)}${r.qtyReported!==r.qty?` <small class="muted">(דווח ${num(r.qtyReported)})</small>`:""}</td><td>${r.photo?"✓":"✗"}</td><td>${r.gps?"✓":"✗"}</td><td>${RS[r.status]}</td><td>${r.status==="rejected"?"-":money(reportValue(r))}</td></tr>`; }).join("")}</tbody></table></div>`;
+}
 function viewSub(uid, per){
   if (S.user.id !== +uid && !can("billing")) return toast("אין לך הרשאה","danger");
-  openModal(`<h2>חשבון קבלן — ${per}</h2>${subHTML(uid, per)}<div class="actions"><button class="dark" onclick="printHTML(printHeader('חשבון קבלן משנה — ${per}')+subHTML(${uid},'${per}')+'<div class=sign-line>חתימת מהנדס: ____________ &nbsp; חתימת הקבלן: ____________</div>')">🖨 הדפס / שמור PDF</button></div>`, true);
+  const sb = (DB.subbills||[]).filter(s => s.userId===+uid && s.period===per).pop(), au = statementAudit(uid, per), es = earnSummary(uid, per);
+  const canEng = can("billing") && S.user.role!=="ceo" && (!sb || sb.status===SUB.DRAFT || Math.abs(sb.total - subStatementLines(uid,per).reduce((a,l)=>a+l.total,0))>1);
+  const canCeo = S.user.role==="ceo" && sb?.status===SUB.ENG;
+  openModal(`<h2>חשבון ${ROLES[U(uid)?.role]||""} — ${per}</h2>${subHTML(uid, per)}
+   <div class="ai-panel"><h3>🤖 בדיקת AI לחשבון</h3><p>${au.checked} דיווחים מאושרים נבדקו · ${es.days} ימי עבודה${es.rejected?` · ${es.rejected} דיווחים נדחו (לא בחשבון)`:""}</p>
+   <ul>${au.issues.map(i => `<li class="fl-${i[0]}">${esc(i[1])}</li>`).join("") || `<li class="fl-ok">לא נמצאו חריגות — כל הדיווחים עם תמונה, GPS תואם וכמויות סבירות</li>`}</ul>
+   ${es.noRate.length ? `<p class="danger-text">⚠ לא הוגדר "מחיר לביצוע" לסעיפים: ${esc(es.noRate.join(", "))} — הם נספרים כ-0. הגדר במסך כתב כמויות.</p>` : ""}</div>
+   ${subDaysHTML(uid, per)}
+   <div class="actions">${canEng?`<button class="dark" onclick="approveSub(${uid},'${per}')">✓ אשר כמהנדס</button>`:""}${canCeo?`<button class="dark" onclick="approveSub(${uid},'${per}')">✓ אשר לתשלום (מנכ״ל)</button>`:""}${can("markPaid")&&sb?.status===SUB.OK?`<button class="dark" onclick="paySub(${sb.id})">סמן כשולם</button>`:""}<button class="dark" onclick="printHTML(printHeader('חשבון קבלן משנה — ${per}')+subHTML(${uid},'${per}')+'<div class=sign-line>חתימת מהנדס: ____________ &nbsp; חתימת הקבלן: ____________</div>')">🖨 הדפס / שמור PDF</button></div>`, true);
 }
+/* שלב 1: מהנדס מאשר את החשבון. שלב 2: מנכ״ל מאשר לתשלום. שלב 3: מנכ״ל מסמן כשולם */
 function approveSub(uid, per){
   if (!guard("billing")) return;
-  const lines = subStatementLines(uid, per), total = lines.reduce((a,l)=>a+l.total,0);
+  const lines = subStatementLines(uid, per), total = Math.round(lines.reduce((a,l)=>a+l.total,0)*100)/100;
   if (!req(total > 0, "אין עבודות מאושרות לחודש זה")) return;
-  if (!confirm(`לאשר לתשלום את חשבון ${U(uid)?.name} לחודש ${per} על סך ${money(total)} (לפני מע״מ)?`)) return;
+  const pend = DB.reports.filter(r => r.userId===+uid && r.status==="pending" && r.date.slice(0,7)===per).length;
+  if (pend && !confirm(`יש עוד ${pend} דיווחים של ${U(uid)?.name} מחודש זה שממתינים לאישור — הם לא ייכללו. להמשיך?`)) return;
   DB.subbills = DB.subbills || [];
   let sb = DB.subbills.find(s => s.userId===+uid && s.period===per);
+  const changed = sb && Math.abs((sb.total||0) - total) > 1;
+  const isCeo = S.user.role === "ceo";
+  if (sb?.status === SUB.PAID && !changed) return toast("החשבון כבר שולם","warning");
+  // מנכ״ל מאשר לתשלום רק אחרי מהנדס (אלא אם אין מהנדס פעיל בחברה)
+  const engExists = DB.users.some(u => u.role==="engineer" && u.active);
+  let next;
+  if (!isCeo) next = SUB.ENG;
+  else if (sb?.status === SUB.ENG && !changed) next = SUB.OK;
+  else if (!engExists) next = SUB.OK;
+  else return toast("החשבון ממתין קודם לאישור מהנדס","warning");
+  if (!confirm(`${next===SUB.ENG?"לאשר כמהנדס":"לאשר לתשלום"} את חשבון ${U(uid)?.name} לחודש ${per}: ${money(total)} (לפני מע״מ)?`)) return;
   if (!sb){ sb = {id:nid(), userId:+uid, period:per}; DB.subbills.push(sb); }
-  Object.assign(sb, {lines, total, status:"אושר לתשלום", approvedBy:S.user.id, approvedAt:today()});
-  audit("אישור חשבון קבלן", `${U(uid)?.name} ${per}: ${money(total)}`);
-  notify(`החשבון שלך לחודש ${per} אושר לתשלום: ${money(total)} + מע״מ`, {userId:+uid, module:"dashboard"});
-  notify(`חשבון קבלן ${U(uid)?.name} (${per}) אושר וממתין לתשלום: ${money(total)}`, {roles:["ceo"], module:"billing"});
-  closeModal(); refresh(); toast("חשבון הקבלן אושר לתשלום");
+  if (changed && sb.status === SUB.PAID){ sb = {id:nid(), userId:+uid, period:per, supplement:true}; DB.subbills.push(sb); }
+  Object.assign(sb, {lines, total, status:next, [next===SUB.ENG?"engBy":"approvedBy"]:S.user.id, [next===SUB.ENG?"engAt":"approvedAt"]:today(), audit:statementAudit(uid, per).issues});
+  audit(next===SUB.ENG ? "אישור מהנדס לחשבון עובד/קבלן" : "אישור מנכ״ל לתשלום", `${U(uid)?.name} ${per}: ${money(total)}`);
+  if (next===SUB.ENG) notify(`חשבון ${U(uid)?.name} לחודש ${per} אושר ע״י מהנדס (${S.user.name}) וממתין לאישורך לתשלום: ${money(total)}`, {roles:["ceo"], module:"billing"});
+  else notify(`החשבון שלך לחודש ${per} אושר לתשלום: ${money(total)} + מע״מ`, {userId:+uid, module:"dashboard"});
+  closeModal(); refresh(); toast(next===SUB.ENG ? "אושר — נשלח למנכ״ל לאישור תשלום" : "החשבון אושר לתשלום");
 }
 function paySub(id){
   if (!guard("markPaid")) return; const sb = DB.subbills.find(s => s.id===id);
+  if (sb.status !== SUB.OK) return toast("אפשר לסמן כשולם רק חשבון שאושר לתשלום","warning");
   if (!confirm(`לסמן כשולם: ${U(sb.userId)?.name} ${sb.period} — ${money(sb.total)}?`)) return;
   sb.status = "שולם"; sb.paidAt = today(); audit("תשלום לקבלן", `${U(sb.userId)?.name} ${sb.period}: ${money(sb.total)}`);
   notify(`התשלום על חשבון ${sb.period} בוצע: ${money(sb.total)} + מע״מ`, {userId:sb.userId, module:"dashboard"}); refresh(); toast("סומן כשולם");

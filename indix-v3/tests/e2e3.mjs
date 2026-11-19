@@ -22,7 +22,7 @@ await ev(() => localStorage.clear()); await page.reload(); await page.waitForTim
 
 // demo contains new items
 const demo = await ev(() => ({rem: DB.boq.filter(b=>b.type==='remove').length, x: DB.boq.filter(b=>b.extra).length, sb: (DB.subbills||[]).length}));
-console.log('demo:', demo); if (!demo.rem || demo.x !== 2 || demo.sb !== 2) bug('demo', JSON.stringify(demo));
+console.log('demo:', demo); if (!demo.rem || demo.x !== 2 || demo.sb !== 4) bug('demo', JSON.stringify(demo));
 
 // ===== engineer creates project: must attach BOQ =====
 await loginAs('סאמי'); await nav('projects');
@@ -30,14 +30,14 @@ await page.getByRole('button', {name:'+ פרויקט חדש'}).click();
 await S('#np_name').fill('שדרוג תאורה — ריינה'); await S('#np_client').fill('מועצה מקומית ריינה'); await S('#np_lat').fill('32.7230'); await S('#np_lng').fill('35.3120');
 await S('#modal button.primary').click(); await page.waitForTimeout(200);
 if (!(await modalOpen())) bug('project','project saved without BOQ file'); else console.log('  blocked without BOQ:', await toast());
-await S('#np_boq').setInputFiles('/home/claude/e2e/boq.csv'); await S('#modal button.primary').click(); await page.waitForTimeout(500);
+await S('#np_boq').setInputFiles('/home/claude/e2e/boq.csv'); await S('#modal button.primary').click(); await page.waitForTimeout(900); await page.getByRole('button',{name:'הכנס לכתב הכמויות'}).click(); await page.waitForTimeout(300);
 const np = await ev(() => { const p = DB.projects.find(p => p.name==='שדרוג תאורה — ריינה'); return p && {id:p.id, boq: projectBoq(p.id).map(b=>[b.item,b.type,b.qty,b.sale,b.sub]), doc: DB.docs.some(d=>d.projectId===p.id && d.cat==='כתב כמויות'), cur:S.current}; });
 console.log('  project:', np); if (!np || np.boq.length !== 5 || !np.doc) bug('project','BOQ CSV not imported / doc not saved '+JSON.stringify(np));
 if (np && np.boq[0][1] !== 'remove') bug('project','type guess for פירוק wrong');
 await page.screenshot({path:'/home/claude/e2e/shots/v34-boq.png'});
 // photo BOQ on another project
 await nav('projects'); await page.getByRole('button', {name:'+ פרויקט חדש'}).click();
-await S('#np_name').fill('פרויקט עם צילום'); await S('#np_client').fill('לקוח'); await S('#np_boq').setInputFiles('/home/claude/e2e/photo.png'); await S('#modal button.primary').click(); await page.waitForTimeout(500);
+await S('#np_name').fill('פרויקט עם צילום'); await S('#np_client').fill('לקוח'); await S('#np_boq').setInputFiles('/home/claude/e2e/photo.png'); await S('#modal button.primary').click(); await page.waitForTimeout(900); await page.keyboard.press('Escape');
 if (!(await ev(() => DB.docs.some(d => d.cat==='כתב כמויות' && d.data && d.data.startsWith('data:image'))))) bug('project','photo BOQ not stored');
 // paste import in BOQ screen
 await ev(() => { const p = DB.projects.find(p=>p.name==='פרויקט עם צילום'); S.filters.project = String(p.id); navigate('boq'); openBoqImport(p.id); });
@@ -99,7 +99,7 @@ if (subName){
   // engineer approves contractor statement
   const uid = await ev(n => DB.users.find(u=>u.name.startsWith(n)).id, subName.slice(0,6));
   await ev(([u]) => approveSub(u, monthKey()), [uid]);
-  if ((await ev(([u]) => DB.subbills.find(s=>s.userId===u && s.period===monthKey())?.status, [uid])) !== 'אושר לתשלום') bug('sub','approve statement failed');
+  if ((await ev(([u]) => DB.subbills.find(s=>s.userId===u && s.period===monthKey())?.status, [uid])) !== 'אושר ע״י מהנדס') bug('sub','engineer approve statement failed');
   // CEO approves extra with price -> included in bill; CEO pays contractor
   await loginAs('Claude');
   const dashX = await S('.timeline-item', {hasText:'עבודה חריגה'}).count(); if (!dashX) bug('dashboard','CEO does not see pending extras');
@@ -107,7 +107,7 @@ if (subName){
   await ev(id => openBoqLine(id), xid); await S('#bq_c').fill('250'); await S('#bq_xok').check(); await S('#modal button.primary').click(); await page.waitForTimeout(150);
   const after = await ev(([p,id]) => ({st:B(id).extraStatus, inBill: billLinesFor(p).find(l=>l.boqId===id)}), [np.id, xid]);
   console.log('  after CEO approval:', after); if (after.st !== 'אושר' || !after.inBill || after.inBill.cum !== 3) bug('extra','approved extra not billable');
-  const sbid = await ev(([u]) => DB.subbills.find(s=>s.userId===u && s.period===monthKey()).id, [uid]); await ev(id => paySub(id), sbid);
+  await ev(([u]) => approveSub(u, monthKey()), [uid]); const sbid = await ev(([u]) => DB.subbills.filter(s=>s.userId===u && s.period===monthKey()).pop().id, [uid]); await ev(id => paySub(id), sbid); if ((await ev(id => DB.subbills.find(s=>s.id===id).status, sbid)) !== 'שולם') bug('sub','CEO approve+pay failed');
   // contractor sees own statement
   await loginAs(subName.slice(0,6)); await nav('dashboard');
   if (!(await S('h3', {hasText:'החשבון החודשי שלי'}).count())) bug('sub','contractor dashboard missing statement');
