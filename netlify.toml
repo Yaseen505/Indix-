@@ -1,0 +1,3 @@
+[build]
+  publish = "indix-v3"
+  command = ""

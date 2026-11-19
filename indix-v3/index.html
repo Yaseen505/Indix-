@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>INDIX V3 — 1598</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="loginView" class="auth-wrap">
+    <div class="auth-card">
+      <div class="brand">INDIX</div>
+      <h1>מערכת ניהול פרויקטים ותשתיות</h1>
+      <p><span id="loginCompany"></span> · <span id="verTag"></span></p>
+      <div id="localLogin">
+        <label for="userInput">משתמש</label>
+        <select id="userInput"></select>
+        <label for="pinInput">קוד כניסה</label>
+        <input id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="••••" />
+        <div id="loginErr" class="danger-text"></div>
+        <button class="primary" onclick="login()">כניסה למערכת</button>
+        <p class="demo-hint">מצב מקומי (ללא ענן): קוד הכניסה לכל המשתמשים הוא <b>1598</b>. ניתן לשנות קודים במסך ניהול והרשאות.</p>
+      </div>
+      <div id="cloudLogin" class="hidden">
+        <label for="emailInput">מייל</label>
+        <input id="emailInput" type="email" dir="ltr" autocomplete="username" />
+        <label for="pwInput">סיסמה</label>
+        <input id="pwInput" type="password" dir="ltr" autocomplete="current-password" />
+        <div id="authMsg" class="muted"></div>
+        <button class="primary" onclick="cloudLogin()">כניסה למערכת</button>
+        <div class="auth-links"><button class="link" onclick="cloudSignUp()">עובד חדש? הרשמה</button><button class="link" onclick="cloudReset()">שכחתי סיסמה</button></div>
+        <button id="cloudOut" class="small hidden" onclick="CLOUD.signOut().then(()=>location.reload())">התנתק ונסה מייל אחר</button>
+      </div>
+      <div id="bootstrap" class="hidden">
+        <h3>הקמת המערכת בענן 🎉</h3>
+        <p>זו הכניסה הראשונה. אתה תוגדר כ<b>מנכ״ל</b> של המערכת.</p>
+        <label for="bsName">השם שלך</label><input id="bsName" />
+        <label for="bsCompany">שם החברה</label><input id="bsCompany" value="צ.ב הנדסת מערכות" />
+        <button class="primary" onclick="doBootstrap(false)">התחל מערכת ריקה (לעבודה אמיתית)</button>
+        <button class="primary ghost-dark" onclick="doBootstrap(true)">התחל עם נתוני דוגמה (להתנסות)</button>
+        <div id="bsMsg" class="muted"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="appView" class="app hidden">
+    <div class="drawer-bg" onclick="closeDrawer()"></div>
+    <aside class="sidebar">
+      <div class="logo">INDIX</div>
+      <div id="userBadge" class="user-badge"></div>
+      <nav id="nav"></nav>
+      <button class="logout" onclick="logout()">יציאה</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="hamburger" onclick="toggleDrawer()" aria-label="תפריט">☰</button>
+        <div class="titles">
+          <small id="pageIndex" class="muted"></small>
+          <h2 id="pageTitle">ראשי</h2>
+          <p id="pageSubtitle">מרכז השליטה של החברה</p>
+        </div>
+        <div class="top-actions">
+          <span id="syncState" class="sync"></span>
+          <button class="dark" onclick="openQuickAdd()">+ פעולה חדשה</button>
+          <span id="dateNow"></span>
+        </div>
+      </header>
+      <section id="content"></section>
+    </main>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div id="modalCard" class="modal-card">
+      <button class="modal-close" onclick="closeModal()" aria-label="סגור">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+  <div id="toasts"></div>
+  <div id="printArea"></div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/core.js"></script>
+  <script src="js/cloud.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/actions.js"></script>
+</body>
+</html>

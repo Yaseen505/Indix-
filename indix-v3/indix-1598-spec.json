@@ -1,0 +1,116 @@
+{
+  "name": "INDIX",
+  "version": "V3.1",
+  "trigger": "1598",
+  "modules": [
+    {
+      "key": "dashboard",
+      "index": "INDEX 01",
+      "name": "ראשי"
+    },
+    {
+      "key": "projects",
+      "index": "INDEX 02",
+      "name": "פרויקטים"
+    },
+    {
+      "key": "plans",
+      "index": "INDEX 03",
+      "name": "תוכניות"
+    },
+    {
+      "key": "tasks",
+      "index": "INDEX 04",
+      "name": "משימות"
+    },
+    {
+      "key": "people",
+      "index": "INDEX 05",
+      "name": "עובדים וקבלנים"
+    },
+    {
+      "key": "fieldAI",
+      "index": "INDEX 06",
+      "name": "שטח + AI"
+    },
+    {
+      "key": "daily",
+      "index": "INDEX 07",
+      "name": "יומן עבודה"
+    },
+    {
+      "key": "progress",
+      "index": "INDEX 08",
+      "name": "התקדמות"
+    },
+    {
+      "key": "warehouse",
+      "index": "INDEX 09",
+      "name": "מחסן"
+    },
+    {
+      "key": "purchasing",
+      "index": "INDEX 10",
+      "name": "רכש"
+    },
+    {
+      "key": "suppliers",
+      "index": "INDEX 11",
+      "name": "ספקים"
+    },
+    {
+      "key": "boq",
+      "index": "INDEX 12",
+      "name": "כתב כמויות"
+    },
+    {
+      "key": "billing",
+      "index": "INDEX 13",
+      "name": "חשבונות"
+    },
+    {
+      "key": "finance",
+      "index": "INDEX 14",
+      "name": "כספים ורווחיות"
+    },
+    {
+      "key": "tenders",
+      "index": "INDEX 15",
+      "name": "מכרזים"
+    },
+    {
+      "key": "ai",
+      "index": "INDEX 16",
+      "name": "AI Control"
+    },
+    {
+      "key": "alerts",
+      "index": "INDEX 17",
+      "name": "התראות"
+    },
+    {
+      "key": "docs",
+      "index": "INDEX 18",
+      "name": "מסמכים"
+    },
+    {
+      "key": "meetings",
+      "index": "INDEX 19",
+      "name": "פגישות"
+    },
+    {
+      "key": "admin",
+      "index": "INDEX 20",
+      "name": "ניהול והרשאות"
+    }
+  ],
+  "status": "frontend-prototype (working, local storage)",
+  "roles": [
+    "ceo",
+    "engineer",
+    "worker",
+    "contractor",
+    "purchasing",
+    "storekeeper"
+  ]
+}

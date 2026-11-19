@@ -1,0 +1,197 @@
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f4f6f8;color:#17202a;-webkit-text-size-adjust:100%}
+.hidden{display:none!important}
+a{color:#1d4ed8}
+.muted{color:#6b7787}.small-text{font-size:13px;margin-top:4px}
+.danger-text{color:#b91c1c}
+
+/* ---------- כניסה ---------- */
+.auth-wrap{min-height:100vh;display:grid;place-items:center;background:linear-gradient(135deg,#111827,#263341);padding:16px}
+.auth-card{width:min(430px,94vw);background:#fff;padding:30px;border-radius:20px;box-shadow:0 20px 60px #0004}
+.brand,.logo{font-weight:900;letter-spacing:3px;font-size:30px}
+.auth-card h1{font-size:22px;margin:12px 0 4px}.auth-card p{color:#697386;margin:4px 0}
+.demo-hint{font-size:13px;background:#f1f5f9;padding:10px;border-radius:10px;margin-top:14px!important}
+#loginErr{min-height:18px;margin-top:6px;font-size:14px}
+
+/* ---------- טפסים וכפתורים ---------- */
+label{display:block;margin-top:12px;margin-bottom:6px;font-weight:700;font-size:14px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #d3dae3;border-radius:10px;background:#fff;font:inherit;font-size:16px}
+input:focus,select:focus,textarea:focus{outline:2px solid #334155;outline-offset:0}
+button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:700;background:#e9edf2;color:#17202a;font:inherit;font-weight:700}
+button:hover{filter:brightness(.96)}button:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:#17202a;color:#fff;width:100%;margin-top:16px;padding:13px}
+.dark{background:#17202a;color:#fff}.danger{background:#fde2e2;color:#991b1b}.ghost{background:transparent;border:1px solid #d3dae3}
+.link{background:transparent;color:#1d4ed8;padding:2px 6px}
+.small{font-size:13px;padding:7px 10px}
+.file-btn{display:inline-block;background:#e9edf2;padding:10px 14px;border-radius:10px;cursor:pointer;margin:0;font-weight:700}
+.filter{width:auto;min-width:150px;padding:8px 10px;font-size:14px}
+.chk{display:inline-flex;align-items:center;gap:6px;font-weight:400;margin:4px 12px 4px 0}.chk input{width:auto}
+.chks{display:flex;flex-wrap:wrap}
+
+/* ---------- מבנה ---------- */
+.app{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.sidebar{background:#111827;color:#fff;padding:20px 14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:0;height:100vh}
+.logo{padding:5px 8px 10px}
+.user-badge{background:#ffffff12;border:1px solid #ffffff1f;padding:12px;border-radius:12px;font-size:13px;line-height:1.6}
+.user-badge .muted{color:#9aa6b8}
+nav{display:flex;flex-direction:column;gap:3px;overflow:auto;flex:1}
+nav button{background:transparent;color:#d9e0ea;text-align:right;padding:9px 12px;display:flex;align-items:center;gap:8px;font-weight:600}
+nav button span{flex:1}nav button small{opacity:.45;font-size:10px;font-weight:400}
+nav button:hover,nav button.active{background:#ffffff16;color:#fff}
+.badge{background:#ef4444;color:#fff;border-radius:999px;font-size:11px;padding:2px 7px;min-width:20px;text-align:center}
+.logout{background:#3a1f25;color:#ffd9df}
+.main{padding:0 28px 40px;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 0 16px}
+.titles{flex:1}.topbar h2{margin:0;font-size:26px}.topbar p{margin:4px 0 0;color:#718096}
+.top-actions{display:flex;gap:10px;align-items:center;color:#657080}
+.hamburger{display:none;font-size:22px;padding:8px 12px}
+.drawer-bg{display:none}
+
+/* ---------- כרטיסים ורשתות ---------- */
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.mini-kpis{margin:12px 0}.mini-kpis .num{font-size:20px}
+.card{background:#fff;border:1px solid #e4e8ee;border-radius:16px;padding:16px;box-shadow:0 3px 12px #17202a0a;min-width:0}
+.card h3{margin:4px 0 8px}
+.kpi .num{font-size:26px;font-weight:900;margin-top:6px}
+.kpi.attn{border-color:#f59e0b;background:#fffbeb}
+.empty{text-align:center;color:#6b7787;padding:26px}
+.hello{margin-bottom:6px}.hello h3{margin-top:0}
+.section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:24px 0 12px}
+.section-title h3{margin:0}
+.projects,.reports{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+.split2{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
+.project-card h3{margin:6px 0}
+.progress{height:10px;background:#e8edf2;border-radius:999px;overflow:hidden;margin:8px 0;display:flex}
+.progress>span{display:block;height:100%;background:#334155}
+.progress>i{display:block;height:100%;background:repeating-linear-gradient(45deg,#f59e0b,#f59e0b 4px,#fcd34d 4px,#fcd34d 8px)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tag{font-size:12px;padding:4px 9px;background:#eef2f6;border-radius:999px;white-space:nowrap}
+.tag.warning{background:#fff1c7;color:#854d0e}.tag.danger{background:#fde2e2;color:#991b1b}.tag.success{background:#dcf5e5;color:#166534}.tag.info{background:#e0ecff;color:#1e40af}
+.score{font-size:12px;font-weight:900;padding:4px 9px;border-radius:999px}
+.score.good{background:#dcf5e5;color:#166534}.score.mid{background:#fff1c7;color:#854d0e}.score.bad{background:#fde2e2;color:#991b1b}
+.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.module-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:20px 0 12px}
+.module-header:first-child{margin-top:0}.module-header h3{margin:0}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.notice{padding:11px 14px;border-radius:12px;background:#eef4ff;border:1px solid #dbe7ff;margin:8px 0}
+.notice.warn{background:#fffbeb;border-color:#fde68a}
+.notice.flow{font-size:13px}
+
+/* ---------- טבלאות ---------- */
+.table-wrap{overflow-x:auto;border-radius:14px;border:1px solid #e4e8ee;background:#fff;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{padding:11px;border-bottom:1px solid #edf0f3;text-align:right;font-size:14px;vertical-align:top}
+th{background:#f7f9fb;white-space:nowrap}
+tfoot td{background:#f7f9fb;font-weight:700}
+tr.row-late td{background:#fff7f7}
+table.mini{border:1px solid #edf0f3;border-radius:10px;margin:8px 0}table.mini th,table.mini td{padding:7px;font-size:13px}
+table.mini .progress{margin:2px 0}
+table.matrix td,table.matrix th{text-align:center;padding:6px;font-size:12px}table.matrix td:first-child{text-align:right;white-space:nowrap}
+table input,table select{padding:6px;font-size:14px;min-width:80px}
+
+/* ---------- טיימליין והתראות ---------- */
+.timeline{display:flex;flex-direction:column;gap:8px}
+.timeline-item{border-right:4px solid #cfd7e2;padding:8px 12px;background:#fff;border-radius:10px;line-height:1.6}
+.card.timeline .timeline-item{background:#f8fafc}
+.lvl-high{border-right-color:#ef4444!important}.lvl-mid{border-right-color:#f59e0b!important}.lvl-low{border-right-color:#3b82f6!important}
+.timeline-item.unread{border-right-color:#1d4ed8;font-weight:600}.timeline-item.read{opacity:.7}
+
+/* ---------- שטח + AI ---------- */
+.report-form{margin-bottom:8px}
+.gps-box{background:#f1f5f9;padding:10px;border-radius:10px;font-size:14px;margin-bottom:6px}
+img.prev{max-width:100%;max-height:180px;border-radius:10px;margin-top:8px;display:block}
+.report-card{display:flex;flex-direction:column;gap:8px;padding:0;overflow:hidden}
+.rc-photo img,.no-photo{width:100%;height:170px;object-fit:cover;display:block;cursor:pointer;background:#e5e7eb}
+.no-photo{display:grid;place-items:center;color:#6b7787}.no-photo.big{height:260px;border-radius:12px}
+.rc-body{padding:0 14px 14px}.rc-body p{margin:6px 0}
+.ai-box{background:#f5f3ff;border:1px solid #e4dcff;padding:8px 10px;border-radius:10px;font-size:13px;margin:6px 0}
+.ai-panel{background:#f5f3ff;border:1px solid #e4dcff;padding:12px 14px;border-radius:12px;margin:12px 0}
+.ai-panel h3{margin:0 0 6px}.ai-panel ul{margin:6px 0;padding-right:20px}
+.fl-high{color:#b91c1c;font-weight:700}.fl-mid{color:#92400e}.fl-low{color:#1e40af}.fl-ok{color:#166534}
+.big-photo{width:100%;border-radius:12px;max-height:420px;object-fit:contain;background:#0f172a}
+
+/* ---------- תוכניות ---------- */
+.plan-card{padding:0;overflow:hidden}.plan-card>*:not(.thumb){margin-right:14px;margin-left:14px}.plan-card .actions{margin-bottom:14px}
+.thumb{height:160px;background:#f1f5f9;cursor:pointer;margin-bottom:10px}.thumb img{width:100%;height:100%;object-fit:cover}
+.file-icon{height:100%;display:grid;place-items:center;text-align:center;font-size:14px}
+.plan-wrap{position:relative;display:inline-block;width:100%;border:1px solid #e4e8ee;border-radius:12px;overflow:hidden;cursor:crosshair}
+.plan-wrap img{width:100%;display:block}
+.mark{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;color:#fff;font-size:12px;font-weight:900;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 2px 6px #0006}
+.mark.done{outline:3px solid #22c55e}
+.mark-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.mark-tools select,.mark-tools input{width:auto;flex:1;min-width:140px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;margin:8px 0}.legend i,.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-left:5px;vertical-align:middle}
+.done-dot{background:#22c55e;color:#fff;font-style:normal;font-size:9px;text-align:center;line-height:12px}
+
+/* ---------- רכש ---------- */
+.offers{display:flex;flex-direction:column;gap:6px}
+.offer{display:flex;align-items:center;gap:8px;font-weight:400;background:#f8fafc;padding:10px;border-radius:10px;margin:0;cursor:pointer}.offer input{width:auto}
+
+/* ---------- חתימה ---------- */
+canvas.sig{width:100%;height:140px;border:2px dashed #cbd5e1;border-radius:12px;background:#fff;touch-action:none;display:block;margin-bottom:6px}
+.sig-img{max-width:100%;border:1px solid #e4e8ee;border-radius:10px;background:#fff}
+
+/* ---------- מודאל וטוסט ---------- */
+.modal{position:fixed;inset:0;background:#0009;display:grid;place-items:center;padding:16px;z-index:100}
+.modal-card{position:relative;background:#fff;width:min(720px,96vw);max-height:92vh;overflow:auto;border-radius:18px;padding:24px}
+.modal-card.wide{width:min(1000px,96vw)}
+.modal-card h2{margin-top:0;padding-left:36px}
+.modal-close{position:absolute;left:12px;top:12px;font-size:20px;padding:4px 12px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}.full{grid-column:1/-1}
+.quick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}.quick-grid button{padding:18px 10px;font-size:15px}
+#toasts{position:fixed;bottom:18px;left:18px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:min(380px,90vw)}
+.toast{background:#17202a;color:#fff;padding:12px 16px;border-radius:12px;box-shadow:0 8px 24px #0004;opacity:0;transform:translateY(10px);transition:.25s}
+.toast.show{opacity:1;transform:none}.toast.danger{background:#991b1b}.toast.warning{background:#92400e}
+hr{border:0;border-top:1px solid #e4e8ee;margin:16px 0}
+h4{margin:14px 0 6px}
+
+/* ---------- הדפסה ---------- */
+#printArea{display:none}
+@media print{
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block;padding:10px;font-size:13px}
+  .ph{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}
+  .ph h1{font-size:20px;margin:0}.brand-p{font-size:22px;letter-spacing:2px}
+  table{border:1px solid #999}th,td{border:1px solid #bbb;padding:6px}
+  .tag{border:1px solid #999}
+  .sign-line{margin-top:50px}
+}
+
+/* ---------- מסכים קטנים / טלפון ---------- */
+@media(max-width:1000px){.app{grid-template-columns:220px 1fr}.split2{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .app{display:block}
+  .hamburger{display:block}
+  .sidebar{position:fixed;top:0;right:0;width:270px;max-width:85vw;z-index:90;transform:translateX(100%);transition:transform .25s;overflow:auto}
+  body.drawer-open .sidebar{transform:none}
+  body.drawer-open .drawer-bg{display:block;position:fixed;inset:0;background:#0007;z-index:80}
+  .main{padding:0 12px 30px}
+  .topbar{position:sticky;top:0;background:#f4f6f8;z-index:50;padding:10px 0;align-items:center}
+  .topbar h2{font-size:19px}.topbar p{display:none}#dateNow{display:none}
+  .top-actions .dark{padding:9px 10px;font-size:13px}
+  .kpis{grid-template-columns:1fr 1fr}.kpi .num{font-size:19px}
+  .projects,.reports,.split,.form-grid{grid-template-columns:1fr}
+  .modal{padding:0;align-items:end}.modal-card,.modal-card.wide{width:100vw;max-height:94vh;border-radius:18px 18px 0 0;padding:18px}
+  .filter{min-width:0;flex:1}
+  .module-header .actions{width:100%}
+  th,td{padding:8px;font-size:13px}
+  /* טבלאות הופכות לכרטיסים בטלפון */
+  .table-wrap:has(table.rt){border:0;background:transparent;overflow:visible}
+  table.rt,table.rt tbody,table.rt tr,table.rt td,table.rt tfoot{display:block;width:100%}
+  table.rt thead{display:none}
+  table.rt tr{background:#fff;border:1px solid #e4e8ee;border-radius:14px;margin-bottom:10px;padding:6px 4px}
+  table.rt td{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed #edf0f3;text-align:left}
+  table.rt td::before{content:attr(data-l);font-weight:700;color:#5b6676;text-align:right;flex-shrink:0}
+  table.rt td:last-child{border-bottom:0}
+  table.rt td[data-l=""]::before{content:none}
+  table.rt td[data-l=""]{justify-content:flex-start}
+  table.rt tfoot tr{background:#f1f5f9}table.rt tfoot td:empty{display:none}
+}
+
+/* ---------- ענן ---------- */
+.sync{font-size:12px;padding:5px 9px;border-radius:999px;white-space:nowrap}.sync:empty{display:none}
+.sync.ok{background:#dcf5e5;color:#166534}.sync.saving{background:#e0ecff;color:#1e40af}.sync.err{background:#fde2e2;color:#991b1b}
+.auth-links{display:flex;justify-content:space-between;margin-top:10px}
+.ghost-dark{background:#fff;color:#17202a;border:2px solid #17202a}
+#bootstrap h3{margin:16px 0 4px}
+@media(max-width:760px){.sync{font-size:11px;padding:4px 7px}}
