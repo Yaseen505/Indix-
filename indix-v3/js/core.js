@@ -101,12 +101,52 @@ function boqSearch(pid, q){
 const isExtraPending = b => !!(b && b.extra && b.extraStatus !== EXTRA.OK);
 /* מחיר לקבלן משנה ליחידה */
 const subRate = b => b && b.sub != null && b.sub !== "" ? +b.sub : 0;
+
+/* ---------- קבלן הפרויקט, הנחת חוזה ורווח קבלן ראשי (V3.6) ---------- */
+/* בפרויקט שהוגדר לו קבלן — כל הכמויות המאושרות בפרויקט שייכות לחשבון של הקבלן הזה */
+function repOwner(r){ const p = P(r.projectId); return p && p.contractorId ? +p.contractorId : +r.userId; }
+const ownerReports = (uid, period) => DB.reports.filter(r => repOwner(r)===+uid && (!period || r.date.slice(0,7)===period));
+const contractors = () => DB.users.filter(u => u.role==="contractor");
+const r2 = n => Math.round((+n||0)*100)/100;
+/* חישוב בשרשרת: מחיר ← פחות הנחת חוזה ← פחות רווח קבלן ראשי ← פחות מחיר הקבלן = הרווח שלי */
+function netUnit(sale, p){ return r2((+sale||0) * (1 - (+p?.discountPct||0)/100) * (1 - (+p?.mainPct||0)/100)); }
+function lineProfit(b, sub){
+  const p = P(b.projectId), s = sub === undefined ? b.sub : sub, has = s != null && s !== "";
+  const afterDisc = r2((+b.sale||0) * (1 - (+p?.discountPct||0)/100)), net = netUnit(b.sale, p);
+  const unit = has ? r2(net - +s) : null;
+  return {sale:+b.sale||0, afterDisc, net, sub:has ? +s : null, unit, total: unit == null ? null : r2(unit * (+b.qty||0)), loss: unit != null && unit < 0};
+}
+function projectProfit(pid){
+  const lines = projectBoq(pid).map(b => ({b, ...lineProfit(b)}));
+  const priced = lines.filter(l => l.unit != null);
+  return {lines, missing:lines.length - priced.length, gross:r2(lines.reduce((a,l)=>a+l.sale*(+l.b.qty||0),0)), net:r2(lines.reduce((a,l)=>a+l.net*(+l.b.qty||0),0)),
+    subTotal:r2(priced.reduce((a,l)=>a+l.sub*(+l.b.qty||0),0)), profit:r2(priced.reduce((a,l)=>a+l.total,0)), losses:priced.filter(l=>l.loss)};
+}
+/* מחירון קבלנים שמור בחברה: לפי קבלן + שם הסעיף. נשמר אוטומטית ומשמש בכל פרויקט הבא (גם של מהנדס אחר) */
+const itemKey = s => String(s||"").replace(/["'״׳`.,:;()\-–—]/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+function cpriceFind(cid, item){ if (!cid) return null; const k = itemKey(item); return (DB.cprices||[]).find(x => x.contractorId===+cid && x.key===k) || null; }
+function cpriceSet(cid, b, price){
+  if (!cid || price == null || price === "" || isNaN(+price)) return;
+  DB.cprices = DB.cprices || []; const k = itemKey(b.item); let x = DB.cprices.find(y => y.contractorId===+cid && y.key===k);
+  if (x && x.price === +price) return;
+  if (!x){ x = {id:nid(), contractorId:+cid, key:k}; DB.cprices.push(x); }
+  Object.assign(x, {item:b.item, unit:b.unit, price:+price, projectId:b.projectId, by:S.user?.id, at:new Date().toISOString()});
+}
+/* ממלא מחיר קבלן לסעיפים בלי מחיר, מתוך המחירון השמור */
+function fillFromPriceList(pid){
+  const p = P(pid); if (!p?.contractorId) return 0; let n = 0;
+  projectBoq(pid).forEach(b => { if (b.sub == null || b.sub === ""){ const x = cpriceFind(p.contractorId, b.item); if (x){ b.sub = x.price; n++; } } });
+  return n;
+}
+/* חשבון ללקוח: סכום לפי כתב הכמויות ← פחות הנחת חוזה ← פחות רווח קבלן ראשי (בשרשרת) */
+function billNet(gross, dp, mp){ const disc = r2(gross*(+dp||0)/100), afterD = r2(gross - disc), main = r2(afterD*(+mp||0)/100); return {disc, main, net:r2(afterD - main)}; }
+const missingSub = pid => projectBoq(pid).filter(b => b.sub == null || b.sub === "");
 const SUB = { DRAFT:"טיוטה", ENG:"אושר ע״י מהנדס", OK:"אושר לתשלום", PAID:"שולם" };
 /* כמה מגיע לעובד/קבלן על דיווח (לפי "מחיר לביצוע" בסעיף) */
 function reportValue(r){ const b = B(r.boqId); return Math.round((r.qty||0) * subRate(b) * 100) / 100; }
 /* סיכום הכנסות לעובד/קבלן בחודש: מאושר, ממתין, היום, ובדיקת AI */
 function earnSummary(uid, period){
-  const reps = DB.reports.filter(r => r.userId===+uid && r.date.slice(0,7)===period);
+  const reps = ownerReports(uid, period);
   const sum = f => Math.round(reps.filter(f).reduce((a,r)=>a+reportValue(r),0)*100)/100;
   const noRate = [...new Set(reps.filter(r => r.status!=="rejected" && !subRate(B(r.boqId))).map(r => B(r.boqId)?.item).filter(Boolean))];
   return { approved:sum(r=>r.status==="approved"), pending:sum(r=>r.status==="pending"), today:sum(r=>r.date===today() && r.status!=="rejected"),
@@ -114,7 +154,7 @@ function earnSummary(uid, period){
 }
 /* בדיקת AI לחשבון: דיווחים בלי תמונה/GPS, מיקום רחוק, כמות חריגה ליום */
 function statementAudit(uid, period){
-  const reps = DB.reports.filter(r => r.userId===+uid && r.date.slice(0,7)===period && r.status==="approved");
+  const reps = ownerReports(uid, period).filter(r => r.status==="approved");
   const issues = [];
   const noPhoto = reps.filter(r => !r.photo).length, noGps = reps.filter(r => !r.gps).length;
   const far = reps.filter(r => { const d = distKm(r.gps, P(r.projectId)); return d != null && d > 2; }).length;
@@ -131,7 +171,7 @@ function statementAudit(uid, period){
 }
 /* שורות חשבון קבלן משנה לחודש: רק כמויות שאושרו ע״י מהנדס */
 function subStatementLines(uid, period){
-  const reps = DB.reports.filter(r => r.userId===+uid && r.status==="approved" && r.date.slice(0,7)===period);
+  const reps = ownerReports(uid, period).filter(r => r.status==="approved");
   const by = {};
   reps.forEach(r => { const b = B(r.boqId); if (!b) return; const k = b.id;
     (by[k] = by[k] || {boqId:b.id, projectId:b.projectId, item:b.item, unit:b.unit, qty:0, rate:subRate(b), extra:!!b.extra, reports:0}); by[k].qty += r.qty; by[k].reports++; });
@@ -171,7 +211,7 @@ function seed(){
   if (window.INDIX_DEMO) return demoSeed();
   const db = { ver:DB_VER, seq:1000, settings:{ company:"צ.ב הנדסת מערכות" },
     users:[], projects:[], boq:[], tasks:[], reports:[], daily:[], plans:[], stock:[], movements:[],
-    suppliers:[], requests:[], bills:[], tenders:[], meetings:[], docs:[], notes:[], audit:[] };
+    suppliers:[], requests:[], bills:[], tenders:[], meetings:[], docs:[], notes:[], audit:[], subbills:[], cprices:[] };
   let seq = 0; const id = () => ++seq;
 
   db.users = [

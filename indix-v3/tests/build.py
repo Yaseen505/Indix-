@@ -4,6 +4,7 @@ src = "/home/claude/Indix-/indix-v3"; out = sys.argv[1] if len(sys.argv)>1 else 
 shutil.rmtree(out, ignore_errors=True); os.makedirs(out+"/js")
 for f in ["styles.css"]: shutil.copy(f"{src}/{f}", out)
 for f in os.listdir(f"{src}/js"): shutil.copy(f"{src}/js/{f}", out+"/js")
+if os.path.isdir(f"{src}/vendor"): shutil.copytree(f"{src}/vendor", out+"/vendor")
 h = open(f"{src}/index.html", encoding="utf8").read()
 shim = '''<script>
 /* תצוגה מקדימה: אחסון וחלונות אישור מותאמים לסביבת התצוגה */

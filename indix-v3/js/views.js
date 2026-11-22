@@ -356,19 +356,23 @@ function suppliers(){
 /* ============================== INDEX 12 · כתב כמויות ============================== */
 function boq(){
   const pid = curProject(false); if (!pid) return `<div class="card empty">אין פרויקטים</div>`;
-  const lines = projectBoq(pid), m = can("seeMoney");
+  const lines = projectBoq(pid), m = can("seeMoney"), pj = P(pid), hasC = !!pj?.contractorId, pp = hasC ? projectProfit(pid) : null;
   let tq = 0, tv = 0, tc = 0;
   const rows = lines.map(b => { const d = boqDone(b), pe = boqPending(b), rem = b.qty - d; tq += b.qty*b.sale; tv += d*b.sale; tc += d*b.cost;
     const r = [`<b>${esc(b.item)}</b>${b.extra?" "+(isExtraPending(b)?tag("חריג — ממתין לאישור מזמין","danger"):tag("חריג מאושר","info")):""}`, esc(b.unit), num(b.qty), num(d), pe?num(pe):"-", rem<0?`<span class="danger-text">${num(rem)}</span>`:num(rem), `${pct(d,b.qty)}%`,
-      ...(m?[money(b.sale), money(b.cost), money(d*b.sale)]:[]), can("editBoq")?`<button class="small" onclick="openBoqLine(${b.id})">ערוך</button>`:""];
-    if (rem < 0) r._cls = "row-late"; return r; });
+      ...(m?[money(b.sale), money(b.cost), money(d*b.sale)]:[]),
+      ...(m&&hasC?(() => { const lp = lineProfit(b); return [lp.sub==null?`<span class="danger-text">חסר</span>`:money2(lp.sub), lp.unit==null?"-":`<span class="${lp.loss?"danger-text":"success-text"}">${money2(lp.unit)}</span>`, lp.total==null?"-":`<b class="${lp.loss?"danger-text":"success-text"}">${money(lp.total)}</b>`]; })():[]), can("editBoq")?`<button class="small" onclick="openBoqLine(${b.id})">ערוך</button>`:""];
+    if (rem < 0 || (m && hasC && lineProfit(b).loss)) r._cls = "row-late"; return r; });
   const boqDocs = DB.docs.filter(d => d.projectId===+pid && d.cat==="כתב כמויות");
   const xp = lines.filter(isExtraPending);
-  return head("כתב כמויות", projectSelect("project", false) + (can("editBoq")?`<button class="dark" onclick="openAiBoq(${pid})">🤖 קרא כתב כמויות (צילום / אקסל)</button><button onclick="openBoqImport(${pid})">📋 הדבקה מאקסל</button><button onclick="openBoqLine(null,${pid})">+ סעיף</button>`:""), "boqT", "כתב-כמויות-"+(P(pid)?.name||""))
+  return head("כתב כמויות", projectSelect("project", false) + (can("editBoq")?`<button class="primary" onclick="openProfit(${pid})">💲 מחירי קבלן ורווח</button><button class="dark" onclick="openAiBoq(${pid})">🤖 קרא כתב כמויות (PDF / אקסל / צילום)</button><button onclick="openBoqImport(${pid})">📋 הדבקה מאקסל</button><button onclick="openBoqLine(null,${pid})">+ סעיף</button>`:""), "boqT", "כתב-כמויות-"+(P(pid)?.name||""))
    + (boqDocs.length ? `<div class="notice">📑 כתב הכמויות המקורי: ${boqDocs.map(d => d.data ? `<button class="small" onclick="openDoc(${d.id})">${esc(d.name)}</button>${can("editBoq")?`<button class="small" onclick="aiReadBoqDoc(${d.id})">🤖 קרא סעיפים</button>`:""}` : esc(d.name)).join(" ")}</div>` : `<div class="notice warn">לא צורף קובץ/צילום של כתב הכמויות לפרויקט זה. <button class="small" onclick="go('docs')">העלה במסמכים</button></div>`)
+   + (m ? (hasC ? `<div class="grid kpis mini-kpis">${kpi("קבלן", esc(uname(pj.contractorId)))}${kpi("הנחת חוזה", num(pj.discountPct||0)+"%")}${kpi("רווח קבלן ראשי", num(pj.mainPct||0)+"%")}${kpi("רווח צפוי", money(pp.profit), `${pp.losses.length ? `⚠ ${pp.losses.length} סעיפים בהפסד` : "אין סעיפים בהפסד"}${pp.missing?` · חסרים ${pp.missing} מחירים`:""}`, pp.losses.length||pp.profit<0?"attn":"")}</div>`
+       + (pp.missing ? `<div class="notice warn">⚠ חסרים מחירי קבלן ב-<b>${pp.missing}</b> סעיפים — חובה להשלים לפני פתיחת משימות על הסעיפים האלה. ${can("editBoq")?`<button class="small dark" onclick="openProfit(${pid})">השלם עכשיו</button>`:""}</div>` : "")
+     : `<div class="notice warn">⚠ לפרויקט זה לא הוגדרו קבלן, הנחת חוזה ורווח קבלן ראשי (חובה בפרויקטים חדשים). ${can("manageProjects")?`<button class="small dark" onclick="openProjectForm(${pid})">הגדר עכשיו</button>`:""}</div>`) : "")
    + (xp.length ? `<div class="notice warn">⚠ ${xp.length} עבודות חריגות ממתינות לתמחור ואישור המזמין — הביצוע שלהן לא נכלל בחשבון ללקוח עד לאישור.${S.user.role==="ceo"?" לחץ \"ערוך\" בשורה כדי לאשר.":""}</div>` : "")
-   + table("boqT", ["סעיף","יחידה","כמות חוזית","בוצע (מאושר)","ממתין לאישור","יתרה","%",...(m?["מחיר מכירה","עלות ליח׳","שווי ביצוע"]:[]),""], rows,
-     {actions:true, foot: m ? ["<b>סה״כ</b>","","","","","","",`היקף ${money(tq)}`,`עלות ${money(tc)}`,`<b>${money(tv)}</b>`,""] : null, empty:"אין סעיפים — הוסף סעיף ראשון"})
+   + table("boqT", ["סעיף","יחידה","כמות חוזית","בוצע (מאושר)","ממתין לאישור","יתרה","%",...(m?["מחיר מכירה","עלות ליח׳","שווי ביצוע"]:[]),...(m&&hasC?["מחיר קבלן","רווח ליח׳","רווח בסעיף"]:[]),""], rows,
+     {actions:true, foot: m ? ["<b>סה״כ</b>","","","","","","",`היקף ${money(tq)}`,`עלות ${money(tc)}`,`<b>${money(tv)}</b>`,...(hasC?["","",`<b class="${pp.profit<0?"danger-text":""}">${money(pp.profit)}</b>`]:[]),""] : null, empty:"אין סעיפים — הוסף סעיף ראשון"})
    + `<p class="muted">"בוצע" כולל רק כמויות שאושרו ע״י מהנדס (כמות פתיחה + דיווחי שטח מאושרים).</p>`;
 }
 
@@ -389,7 +393,8 @@ function billing(){
    + (() => { const xs = projectBoq(pid).filter(b => isExtraPending(b) && boqDone(b) > 0); return xs.length ? `<div class="notice warn">⚠ עבודות חריגות שבוצעו וממתינות לאישור המזמין (לא נכללות בחשבון): ${xs.map(b => `<b>${esc(b.item)}</b> ${num(boqDone(b))} ${esc(b.unit)}`).join(" · ")} <button class="small" onclick="go('boq')">לתמחור ואישור</button></div>` : ""; })()
    + table("billPrev", ["סעיף","יחידה","מצטבר קודם","מצטבר נוכחי","כמות לתקופה","מחיר","סכום לתקופה"],
      lines.map(l => [esc(l.item), esc(l.unit), num(l.prevCum), num(l.cum), `<b>${num(l.cum-l.prevCum)}</b>`, money(l.price), money((l.cum-l.prevCum)*l.price)]),
-     {foot:["<b>סה״כ לתקופה (לפני מע״מ)</b>","","","","","",`<b>${money(total)}</b>`]})
+     {foot:(() => { const pj = P(pid), dp = +pj?.discountPct||0, mp = +pj?.mainPct||0; if (!dp && !mp) return ["<b>סה״כ לתקופה (לפני מע״מ)</b>","","","","","",`<b>${money(total)}</b>`];
+       const x = billNet(total, dp, mp); return ["<b>סה״כ לתקופה (לפני מע״מ)</b>","","","","",`<small>לפי כתב הכמויות ${money(total)}${dp?` · הנחה ${num(dp)}% -${money(x.disc)}`:""}${mp?` · קבלן ראשי ${num(mp)}% -${money(x.main)}`:""}</small>`,`<b>${money(x.net)}</b>`]; })()})
    + `<div class="actions" style="margin:12px 0">${can("billing") ? (draft ? `<span class="muted">קיימת טיוטה (#${draft.id}) לפרויקט זה</span> <button onclick="viewBill(${draft.id})">פתח טיוטה</button>` : `<button class="dark" ${total<=0?"disabled":""} onclick="createBill(${pid})">הפק חשבון מהכמויות המאושרות</button>`) : ""}<button class="ghost" onclick="exportTable('billPrev','חשבון-טיוטה')">⬇ Excel</button></div>`
    + head("חשבונות שהופקו", "", "billsT", "חשבונות")
    + table("billsT", ["מס׳","פרויקט","תקופה","תאריך","סכום","סטטוס","פעולות"], bills.map(b => [b.id, pname(b.projectId), b.period, fmtDate(b.date), money(b.total), st(b.status),

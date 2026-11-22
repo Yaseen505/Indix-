@@ -28,6 +28,7 @@ function openProject(id){
   openModal(`<h2>${esc(p.name)}</h2><p class="muted">${esc(p.client)} · ${st(p.status)} · מנהל: ${uname(p.managerId)} · ${fmtDate(p.start)} – ${fmtDate(p.end)}</p>
    ${bar(s.progress)}<b>${s.progress}% ביצוע</b>
    ${m?`<div class="grid kpis mini-kpis">${kpi("היקף חוזה",money(s.contract))}${kpi("בוצע",money(s.executed))}${kpi("עלות",money(s.cost),`${s.budgetUse}% מהתקציב`)}${kpi("רווח",money(s.profit),`${s.margin}%`)}</div>`:""}
+   ${m ? (p.contractorId ? `<p>💲 קבלן: <b>${esc(uname(p.contractorId))}</b> · הנחת חוזה <b>${num(p.discountPct||0)}%</b> · רווח קבלן ראשי <b>${num(p.mainPct||0)}%</b> · רווח צפוי לפי מחירי הקבלן: <b>${money(projectProfit(p.id).profit)}</b></p>` : `<p class="notice warn">לא הוגדרו קבלן, הנחת חוזה ורווח קבלן ראשי לפרויקט.</p>`) : ""}
    <p>משימות פתוחות: <b>${openT}</b> · דרישות רכש פתוחות: <b>${openR}</b>${next?` · פגישה הבאה: <b>${fmtDate(next.date)}</b>`:""}</p>
    <p><b>צוות:</b> ${team.map(u=>`${esc(u.name)} (${ROLES[u.role]})`).join(", ")||"-"}</p>
    ${p.lat?`<p>📍 <a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener">מיקום האתר במפה</a> <small class="muted">(משמש לבדיקת GPS של דיווחים)</small></p>`:`<p class="notice warn">לא הוגדר מיקום לאתר — בדיקת ה-GPS של AI לא תפעל לפרויקט זה.</p>`}
@@ -47,40 +48,66 @@ function openProjectForm(id){
    <div><label>תאריך התחלה</label><input id="np_start" type="date" value="${esc(p.start)}"></div><div><label>יעד סיום</label><input id="np_end" type="date" value="${esc(p.end)}"></div>
    <div><label>קו רוחב (Latitude)</label><input id="np_lat" type="number" step="any" value="${esc(p.lat??"")}"></div><div><label>קו אורך (Longitude)</label><input id="np_lng" type="number" step="any" value="${esc(p.lng??"")}"></div>
    <div class="full"><button type="button" class="small" onclick="getGPS().then(g=>{$('np_lat').value=g.lat;$('np_lng').value=g.lng;toast('המיקום הנוכחי הוזן')}).catch(e=>toast(e.message,'danger'))">📍 השתמש במיקום הנוכחי שלי (כשאני באתר)</button></div>
+   <h3 class="full">💲 תנאי חוזה וקבלן — חובה</h3>
+   <div><label>הנחת חוזה (%) *</label><input id="np_disc" type="number" step="any" min="0" max="100" value="${esc(p.discountPct ?? "")}" placeholder="לדוגמה 20"></div>
+   <div><label>רווח קבלן ראשי (%) *</label><input id="np_main" type="number" step="any" min="0" max="100" value="${esc(p.mainPct ?? "")}" placeholder="לדוגמה 10"><small class="muted">אם אין קבלן ראשי — רשום 0</small></div>
+   <div class="full"><label>הקבלן שמבצע את הפרויקט *</label><select id="np_con"><option value="">— בחר קבלן —</option>${optionList(contractors().filter(u => u.active || u.id===p.contractorId).map(u=>[u.id,u.name]), p.contractorId)}</select>
+     <small class="muted">${contractors().some(u=>u.active) ? "המערכת תחשב לקבלן הזה חשבון חודשי לפי הכמויות שאושרו בפרויקט ומחירי הקבלן בכל סעיף. מחירים שכבר נשמרו לקבלן בפרויקטים קודמים ימולאו אוטומטית." : `<span class="danger-text">אין קבלנים במערכת — ${S.user.role==="ceo" ? "הוסף משתמש מסוג \"קבלן משנה\" במסך ניהול והרשאות" : "בקש מהמנכ״ל להוסיף את הקבלן במסך ניהול והרשאות"}.</span>`}</small></div>
    ${id ? "" : `<div class="full boq-file"><label>📑 כתב כמויות / רשימת חומרים — צילום או קובץ *</label>
-     <label class="file-btn">📷 צלם או בחר קובץ<input id="np_boq" type="file" accept="image/*,.pdf,.csv,.txt,.xlsx,.xls" hidden onchange="npBoqFile(this)"></label>
-     <div id="np_boq_info" class="muted small-text">חובה לצרף. 🤖 ה-AI יקרא את הקובץ (צילום, אקסל או CSV) ויציג את כל הסעיפים לבדיקה — אחר כך המהנדס ימצא כל סעיף במשימות לפי מילה.</div></div>`}
+     <label class="file-btn">📷 צלם או בחר קובץ<input id="np_boq" type="file" accept="image/*,.pdf,.csv,.txt,.xlsx,.xls" multiple hidden onchange="npBoqFile(this)"></label>
+     <div id="np_boq_info" class="muted small-text">חובה לצרף. 🤖 ה-AI יקרא את הקובץ (PDF, צילום, אקסל או CSV) ויציג את כל הסעיפים לבדיקה. בשלב הבא חובה לרשום ליד כל סעיף כמה הקבלן מקבל — והמערכת תראה כמה אתה מרוויח או מפסיד בכל סעיף.</div></div>`}
    <button class="primary full" onclick="saveProject(${id||""})">שמור פרויקט</button></div>`);
 }
 function npBoqFile(input){
-  const f = input.files[0]; if (!f) return;
-  $("np_boq_info").innerHTML = `✓ <b>${esc(f.name)}</b> (${num(Math.round(f.size/1024))} KB) — ה-AI יקרא את הסעיפים אחרי השמירה`;
+  const fs = [...input.files]; if (!fs.length) return;
+  $("np_boq_info").innerHTML = fs.map(f => `✓ <b>${esc(f.name)}</b> (${f.size > 1048576 ? num(Math.round(f.size/104857.6)/10)+" MB" : num(Math.round(f.size/1024))+" KB"})`).join("<br>") + " — ה-AI יקרא את הסעיפים אחרי השמירה";
+}
+/* שמירת קובץ כתב כמויות במסמכים. בענן — הקובץ עולה לאחסון (עד 25MB). במצב מקומי — עד 3MB בגלל מגבלת הדפדפן */
+async function boqFileData(f){
+  try {
+    if (f.type.startsWith("image/")) return (await readImage(f, 2000)).data;
+    const lim = (typeof CLOUD !== "undefined" && CLOUD.enabled) ? 25 : 3;
+    if (f.size <= lim*1024*1024) return await readFileData(f);
+  } catch(e){}
+  return null;
 }
 async function saveProject(id){
   if (!guard("manageProjects")) return;
-  const boqFile = !id ? $("np_boq")?.files[0] : null;
-  if (!id && !req(boqFile, "חובה לצרף צילום או קובץ של כתב הכמויות / רשימת החומרים")) return;
+  const boqFiles = !id ? [...($("np_boq")?.files || [])] : [];
   const d = {name:val("np_name"), client:val("np_client"), budget:nval("np_budget"), status:val("np_status"), managerId:+val("np_mgr"),
-    start:val("np_start"), end:val("np_end"), lat:val("np_lat")?nval("np_lat"):null, lng:val("np_lng")?nval("np_lng"):null};
+    start:val("np_start"), end:val("np_end"), lat:val("np_lat")?nval("np_lat"):null, lng:val("np_lng")?nval("np_lng"):null,
+    discountPct: val("np_disc")==="" ? null : nval("np_disc"), mainPct: val("np_main")==="" ? null : nval("np_main"), contractorId: val("np_con") ? +val("np_con") : null};
   if (!req(d.name, "יש להזין שם פרויקט") || !req(d.client, "יש להזין לקוח")) return;
+  if (!req(d.discountPct != null && d.discountPct >= 0 && d.discountPct < 100, "חובה להזין הנחת חוזה באחוזים (0 אם אין הנחה)")) return;
+  if (!req(d.mainPct != null && d.mainPct >= 0 && d.mainPct < 100, "חובה להזין רווח קבלן ראשי באחוזים (0 אם אין קבלן ראשי)")) return;
+  if (!req(d.contractorId, "חובה לבחור את הקבלן שמבצע את הפרויקט")) return;
+  if (!id && !req(boqFiles.length, "חובה לצרף את כתב הכמויות (PDF, אקסל, CSV או צילום)")) return;
   if (!req(!d.end || !d.start || d.end >= d.start, "תאריך הסיום לפני תאריך ההתחלה")) return;
   if (!id && !req(!DB.projects.some(p => p.name === d.name), "כבר קיים פרויקט בשם הזה")) return;
-  if (id){ Object.assign(P(id), d); audit("עריכת פרויקט", d.name); }
-  else {
-    const p = {id:nid(), ...d}; DB.projects.push(p); audit("יצירת פרויקט", d.name); S.filters.project = String(p.id);
-    let added = 0, data = null;
-    try {
-      if (boqFile.type.startsWith("image/")) data = (await readImage(boqFile, 1600)).data;
-      else if (boqFile.size <= 1.5*1024*1024) data = await readFileData(boqFile);
-    } catch(e){}
-    DB.docs.push({id:nid(), projectId:p.id, name:boqFile.name, cat:"כתב כמויות", size:boqFile.size, data, by:S.user.id, at:new Date().toISOString()});
-    audit("צירוף כתב כמויות לפרויקט", boqFile.name);
-    notify(`פרויקט חדש: ${d.name} (${U(S.user.id)?.name})`, {roles:["ceo","engineer"], module:"projects"});
-    closeModal(); save(); S.filters.project = String(p.id); go("boq");
-    toast("הפרויקט נוצר וכתב הכמויות נשמר במסמכים — ה-AI קורא את הסעיפים…");
-    return aiReadBoq(p.id, [boqFile]);
+  // הקבלן מצורף לפרויקט כדי שיוכל לדווח ולראות את החשבון שלו
+  const con = U(d.contractorId); const attach = () => { if (con && con.projects !== "all" && !(con.projects||[]).includes(pidNow)){
+    if (CLOUD.enabled && S.user.role !== "ceo") notify(`${con.name} הוגדר כקבלן בפרויקט ${P(pidNow)?.name} — יש לשייך אותו לפרויקט במסך ניהול והרשאות`, {roles:["ceo"], module:"admin"});
+    else { con.projects = [...(con.projects||[]), pidNow]; audit("שיוך קבלן לפרויקט", `${con.name} → ${P(pidNow)?.name}`); } } };
+  let pidNow = id;
+  if (id){
+    const p = P(id), before = JSON.stringify([p.discountPct, p.mainPct, p.contractorId]);
+    Object.assign(p, d); audit("עריכת פרויקט", d.name);
+    if (before !== JSON.stringify([d.discountPct, d.mainPct, d.contractorId])) audit("שינוי תנאי חוזה/קבלן", `${d.name}: הנחה ${d.discountPct}% · קבלן ראשי ${d.mainPct}% · קבלן ${con?.name||"-"}`);
+    attach(); const n = fillFromPriceList(id);
+    closeModal(); refresh(); toast("הפרויקט עודכן" + (n ? ` · ${n} מחירי קבלן מולאו מהמחירון` : ""));
+    return;
   }
-  closeModal(); refresh(); toast("הפרויקט עודכן");
+  const p = {id:nid(), ...d}; DB.projects.push(p); pidNow = p.id; attach(); audit("יצירת פרויקט", `${d.name} · הנחה ${d.discountPct}% · קבלן ראשי ${d.mainPct}% · קבלן ${con?.name||"-"}`); S.filters.project = String(p.id);
+  let big = [];
+  for (const f of boqFiles){
+    const data = await boqFileData(f); if (!data) big.push(f.name);
+    DB.docs.push({id:nid(), projectId:p.id, name:f.name, cat:"כתב כמויות", size:f.size, data, by:S.user.id, at:new Date().toISOString()});
+    audit("צירוף כתב כמויות לפרויקט", f.name);
+  }
+  notify(`פרויקט חדש: ${d.name} (${U(S.user.id)?.name}) · קבלן: ${con?.name||"-"}`, {roles:["ceo","engineer"], module:"projects"});
+  closeModal(); save(); S.filters.project = String(p.id); go("boq");
+  toast("הפרויקט נוצר — ה-AI קורא את כתב הכמויות…" + (big.length ? ` (הקובץ ${big.join(", ")} גדול מדי לשמירה במכשיר — הסעיפים ייקראו, אבל הקובץ עצמו לא יישמר)` : ""));
+  return aiReadBoq(p.id, boqFiles);
 }
 
 /* ------------------------------ תוכניות ------------------------------ */
@@ -207,6 +234,7 @@ function saveTask(id){
     audit("עבודה חריגה נפתחה", `${P(d.projectId)?.name}: ${X.item} · ${d.qty} ${line.unit}`);
     notify(`⚠ עבודה חריגה (לא בכתב הכמויות): ${X.item} — ${num(d.qty)} ${line.unit} · ${P(d.projectId)?.name}. יש לתמחר ולאשר מול המזמין.`, {roles:["ceo"], module:"boq"});
   }
+  { const pj = P(d.projectId), bl = B(d.boqId); if (pj?.contractorId && bl && !bl.extra && (bl.sub == null || bl.sub === "")){ toast(`חובה להזין מחיר קבלן לסעיף "${bl.item}" לפני פתיחת משימה (כתב כמויות ← 💲 מחירי קבלן)`, "danger"); return; } }
   if (!req(d.boqId, "יש לבחור סעיף מכתב הכמויות — או לבחור \"אחר\" לעבודה חריגה") || !req(d.title, "יש להזין תיאור") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0") || !req(d.assigneeId, "יש לבחור אחראי")) return;
   const free = boqFree(d.boqId, id);
   if (B(d.boqId)?.extra){ /* סעיף חריג: הכמות מתעדכנת לפי סך המשימות */ }
@@ -279,7 +307,7 @@ function submitReport(){
   if (!save()){ DB.reports.pop(); return; }
   const gps = S.draft.gps; S.draft = {gps}; S.filters.rstatus = isFieldRole() ? "all" : S.filters.rstatus;
   render();
-  const val_ = reportValue(r), es = earnSummary(S.user.id, monthKey());
+  const val_ = repOwner(r)===S.user.id ? reportValue(r) : 0, es = earnSummary(S.user.id, monthKey());
   toast(`הדיווח נשלח לאישור מהנדס · AI: ${a.rec}` + (val_ ? ` · 💰 על הדיווח הזה מגיע לך ${money(val_)} (אחרי אישור). החודש: ${money(es.approved)} מאושר + ${money(es.pending)} ממתין` : ""));
 }
 function openApprove(id){
@@ -557,7 +585,74 @@ function saveBoqImport(pid){
   if (!guard("editBoq")) return;
   const rows = importBoqText(pid, val("bi_txt"));
   if (!req(rows.length, "לא זוהו סעיפים — ודא שיש עמודות סעיף, יחידה וכמות")) return;
-  closeModal(); refresh(); toast(`${rows.length} סעיפים יובאו לכתב הכמויות`);
+  afterBoqAdded(pid, `${rows.length} סעיפים יובאו לכתב הכמויות`);
+}
+/* אחרי הכנסת סעיפים: שמירת מחירי קבלן שהגיעו מהקובץ במחירון, מילוי מהמחירון, ומעבר למסך מחירי הקבלן אם חסר */
+function afterBoqAdded(pid, msg){
+  const p = P(pid);
+  if (p?.contractorId) projectBoq(pid).forEach(b => { if (b.sub != null && b.sub !== "" && !cpriceFind(p.contractorId, b.item)) cpriceSet(p.contractorId, b, b.sub); });
+  const filled = fillFromPriceList(pid), miss = p?.contractorId ? missingSub(pid).length : 0;
+  closeModal(); S.filters.project = String(pid); save(); go("boq");
+  toast(msg + (filled ? ` · ${filled} מחירי קבלן מולאו מהמחירון השמור` : "") + (miss ? ` · חסרים מחירי קבלן ב-${miss} סעיפים` : ""));
+  if (miss) openProfit(pid);
+}
+
+/* ---------- 💲 מחירי קבלן וניתוח רווח לכל סעיף ---------- */
+function openProfit(pid){
+  if (!guard("editBoq")) return;
+  const p = P(pid); if (!p) return;
+  if (!p.contractorId) return openModal(`<h2>💲 מחירי קבלן — ${esc(p.name)}</h2><p class="notice warn">לא הוגדרו לפרויקט קבלן, הנחת חוזה ורווח קבלן ראשי.</p><button class="dark" onclick="openProjectForm(${pid})">הגדר עכשיו בעריכת הפרויקט</button>`);
+  const lines = projectBoq(pid);
+  openModal(`<h2>💲 מחירי קבלן ורווח לכל סעיף — ${esc(p.name)}</h2>
+   <p class="muted">קבלן: <b>${esc(uname(p.contractorId))}</b> · הנחת חוזה <b>${num(p.discountPct||0)}%</b> · רווח קבלן ראשי <b>${num(p.mainPct||0)}%</b> <button class="small" onclick="openProjectForm(${pid})">שנה</button><br>
+   עבור סעיף-סעיף ורשום כמה הקבלן מקבל ליחידה. החישוב: מחיר ← פחות הנחת חוזה ← פחות רווח קבלן ראשי ← פחות מחיר הקבלן = <b>הרווח שלך</b>. מחירים שנשמרו לקבלן בעבר ממולאים אוטומטית (מסומן ★).</p>
+   <input id="pf_q" placeholder="🔍 חיפוש סעיף" oninput="pfFilter()">
+   <div class="table-wrap"><table class="mini" id="pfT"><thead><tr><th>סעיף</th><th>כמות</th><th>מחיר</th><th>אחרי הנחה</th><th>אחרי קבלן ראשי</th><th>מחיר קבלן *</th><th>רווח ליח׳</th><th>רווח בסעיף</th></tr></thead><tbody>
+   ${lines.map(b => { const sug = (b.sub == null || b.sub === "") ? cpriceFind(p.contractorId, b.item) : null, lp = lineProfit(b);
+     return `<tr data-q="${esc(b.item)}"><td>${esc(b.item)}${b.extra?" "+tag("חריג","danger"):""}</td><td data-l="כמות">${num(b.qty)} ${esc(b.unit)}</td><td data-l="מחיר" class="pf_hm">${money2(lp.sale)}</td><td data-l="אחרי הנחה" class="pf_hm">${money2(lp.afterDisc)}</td><td data-l="נטו אחרי קבלן ראשי"><b>${money2(lp.net)}</b></td>
+     <td data-l="מחיר קבלן *"><input class="pf_in" data-id="${b.id}" data-net="${lp.net}" data-q="${b.qty}" type="number" step="any" min="0" value="${b.sub ?? sug?.price ?? ""}" style="width:90px" oninput="pfCalc()">${sug?' <span title="מולא מהמחירון השמור של הקבלן">★</span>':""}</td>
+     <td class="pf_u" data-l="רווח ליח׳"></td><td class="pf_t" data-l="רווח בסעיף"></td></tr>`; }).join("") || `<tr><td colspan="8" class="muted">אין סעיפים בכתב הכמויות עדיין</td></tr>`}</tbody>
+   <tfoot><tr><td colspan="5"><b>סה״כ</b></td><td id="pf_ts"></td><td></td><td id="pf_tp"></td></tr></tfoot></table></div>
+   <div id="pf_ai" class="ai-panel"></div>
+   <div class="actions"><button class="primary" onclick="saveProfit(${pid})">שמור מחירי קבלן</button><button class="ghost" onclick="exportTable('pfT','רווח-לפי-סעיף-${esc(p.name)}')">⬇ Excel</button></div>`, true);
+  pfCalc();
+}
+function money2(n){ return new Intl.NumberFormat("he-IL",{style:"currency",currency:"ILS",maximumFractionDigits:2}).format(n||0); }
+function pfFilter(){ const q = val("pf_q"); document.querySelectorAll("#pfT tbody tr").forEach(tr => { tr.style.display = !q || (tr.dataset.q||"").includes(q) ? "" : "none"; }); }
+function pfCalc(){
+  let tp = 0, ts = 0, miss = 0, loss = [], best = null;
+  document.querySelectorAll(".pf_in").forEach(inp => {
+    const tr = inp.closest("tr"), net = +inp.dataset.net, q = +inp.dataset.q, has = inp.value !== "";
+    const u = has ? r2(net - +inp.value) : null, t = u == null ? null : r2(u*q);
+    tr.querySelector(".pf_u").innerHTML = u == null ? `<small class="danger-text">חסר</small>` : `<span class="${u<0?"danger-text":"success-text"}">${money2(u)}</span>`;
+    tr.querySelector(".pf_t").innerHTML = t == null ? "" : `<b class="${t<0?"danger-text":"success-text"}">${money(t)}</b>`;
+    tr.classList.toggle("row-late", u != null && u < 0);
+    if (u == null){ miss++; return; } tp += t; ts += +inp.value*q;
+    const item = tr.dataset.q; if (u < 0) loss.push([item, t]); if (!best || t > best[1]) best = [item, t];
+  });
+  if ($("pf_tp")) $("pf_tp").innerHTML = `<b class="${tp<0?"danger-text":""}">${money(tp)}</b>`;
+  if ($("pf_ts")) $("pf_ts").innerHTML = `<small>לקבלן ${money(ts)}</small>`;
+  loss.sort((a,b) => a[1]-b[1]);
+  if ($("pf_ai")) $("pf_ai").innerHTML = `<h3>🤖 סיכום רווחיות</h3><ul>
+    <li>${miss ? `<span class="danger-text">חסרים מחירי קבלן ב-${miss} סעיפים — חובה להשלים</span>` : `<span class="success-text">✓ לכל הסעיפים יש מחיר קבלן</span>`}</li>
+    <li>רווח צפוי על כל הכמויות${miss ? " (בסעיפים שתומחרו)" : ""}: <b class="${tp<0?"danger-text":""}">${money(tp)}</b></li>
+    ${loss.length ? `<li class="fl-high">⚠ ${loss.length} סעיפים בהפסד: ${loss.slice(0,5).map(l => `${esc(l[0])} (${money(l[1])})`).join(" · ")}${loss.length>5?" …":""}</li>` : (miss < document.querySelectorAll(".pf_in").length ? `<li class="fl-ok">אין סעיפים בהפסד</li>` : "")}
+    ${best && best[1] > 0 ? `<li>הסעיף הרווחי ביותר: ${esc(best[0])} (${money(best[1])})</li>` : ""}</ul>`;
+}
+function saveProfit(pid){
+  if (!guard("editBoq")) return;
+  const p = P(pid); let n = 0, miss = 0, loss = 0;
+  document.querySelectorAll(".pf_in").forEach(inp => {
+    const b = B(+inp.dataset.id); if (!b) return;
+    if (inp.value === ""){ miss++; return; }
+    const v = +inp.value; if (!(v >= 0)) return;
+    if (b.sub !== v){ b.sub = v; n++; }
+    cpriceSet(p.contractorId, b, v);
+    if (lineProfit(b).loss) loss++;
+  });
+  audit("עדכון מחירי קבלן", `${p.name} · ${uname(p.contractorId)}: ${n} סעיפים${miss?` · חסרים ${miss}`:""}`);
+  save(); closeModal(); refresh();
+  toast(miss ? `נשמר. חסרים עדיין מחירי קבלן ב-${miss} סעיפים — חובה להשלים` : `נשמר — המחירים נשמרו גם במחירון של ${uname(p.contractorId)} לפרויקטים הבאים` + (loss ? ` · ⚠ ${loss} סעיפים בהפסד` : ""), miss ? "warning" : "success");
 }
 function openBoqLine(id, pid){
   if (!guard("editBoq")) return;
@@ -567,23 +662,34 @@ function openBoqLine(id, pid){
    <div><label>יחידה</label><input id="bq_u" value="${esc(b.unit)}"></div><div class="full"><label>תיאור הסעיף *</label><input id="bq_i" value="${esc(b.item||WORK[b.type].name)}"></div>
    <div><label>כמות חוזית *</label><input id="bq_q" type="number" step="any" value="${esc(b.qty)}"></div><div><label>כמות פתיחה (בוצע לפני המערכת)</label><input id="bq_b" type="number" step="any" value="${esc(b.base)}"></div>
    <div><label>מחיר מכירה ליח׳ (ללקוח) *</label><input id="bq_s" type="number" step="any" value="${esc(b.sale)}"></div><div><label>עלות ליח׳ *</label><input id="bq_c" type="number" step="any" value="${esc(b.cost)}"></div>
-   <div><label>מחיר לביצוע ליח׳ (לעובד / קבלן)</label><input id="bq_sub" type="number" step="any" value="${esc(b.sub ?? "")}" placeholder="לא הוגדר"><small class="muted">לפיו ה-AI מחשב כמה מגיע לעובד או לקבלן על כל דיווח</small></div><div></div>
+   ${(() => { const pj = P(b.projectId), cid = pj?.contractorId, sug = (b.sub == null || b.sub === "") ? cpriceFind(cid, b.item) : null;
+     return `<div><label>${cid ? `מחיר קבלן ליח׳ (${esc(uname(cid))}) *` : "מחיר לביצוע ליח׳ (לעובד / קבלן)"}</label><input id="bq_sub" type="number" step="any" value="${esc(b.sub ?? sug?.price ?? "")}" placeholder="לא הוגדר">
+     <small class="muted">${sug ? "✓ מולא מהמחירון השמור של הקבלן" : cid ? "נשמר במחירון הקבלן לפרויקטים הבאים" : "לפיו ה-AI מחשב כמה מגיע לעובד או לקבלן על כל דיווח"}</small></div>
+     <div>${cid ? `<label>הרווח שלך ליח׳</label><div id="bq_pr" class="num"></div><small class="muted">הנחה ${num(pj.discountPct||0)}% ← קבלן ראשי ${num(pj.mainPct||0)}% ← פחות מחיר הקבלן</small>` : ""}</div>`; })()}
    ${b.extra ? `<div class="full notice ${isExtraPending(b)?"warn":""}">⚠ <b>עבודה חריגה</b> — לא הייתה בכתב הכמויות המקורי. נפתחה ע״י ${uname(b.extraBy)} ב-${fmtDate(b.extraAt)}${b.extraNote?` · ${esc(b.extraNote)}`:""}.<br>סטטוס: <b>${esc(b.extraStatus)}</b>${isExtraPending(b)?" — לא נכלל בחשבון ללקוח עד לאישור.":""}
      ${isExtraPending(b) && S.user.role==="ceo" ? `<label class="chk"><input type="checkbox" id="bq_xok"> המזמין אישר את החריג במחיר שלמעלה — לכלול בחשבונות</label>` : ""}</div>` : ""}
    <button class="primary full" onclick="saveBoqLine(${id||"null"},${b.projectId})">שמור</button>
    ${id && !DB.tasks.some(t=>t.boqId===id) ? `<button class="danger full" onclick="delBoqLine(${id})">מחק סעיף</button>` : ""}</div>`);
+  const pj = P(b.projectId);
+  if (pj?.contractorId){ const upd = () => { const el = $("bq_pr"); if (!el) return; const sv = val("bq_sub"); if (sv === ""){ el.innerHTML = `<span class="danger-text">חסר מחיר קבלן</span>`; return; }
+      const u = r2(netUnit(nval("bq_s"), pj) - +sv); el.innerHTML = `<span class="${u<0?"danger-text":"success-text"}">${money2(u)}</span>`; };
+    ["bq_s","bq_sub"].forEach(k => $(k)?.addEventListener("input", upd)); upd(); }
 }
 function saveBoqLine(id, pid){
   if (!guard("editBoq")) return;
   const d = {type:val("bq_t"), unit:val("bq_u"), item:val("bq_i"), qty:nval("bq_q"), base:nval("bq_b"), sale:nval("bq_s"), cost:nval("bq_c"), sub:val("bq_sub")===""?null:nval("bq_sub")};
+  const pjc = P(pid)?.contractorId;
+  if (pjc && !req(d.sub != null && d.sub >= 0, "חובה להזין מחיר קבלן לסעיף")) return;
   const cur = id ? B(id) : null, approveX = !!$("bq_xok")?.checked;
   if (!req(d.item, "יש להזין תיאור") || !req(d.qty > 0, "כמות חייבת להיות גדולה מ-0")) return;
   if (!(cur?.extra && !approveX) && !req(d.sale > 0 && d.cost >= 0, "יש להזין מחיר מכירה ועלות")) return;
   if (approveX){ d.extraStatus = EXTRA.OK; d.extraApprovedBy = S.user.id; d.extraApprovedAt = today(); audit("אישור עבודה חריגה", `${d.item}: ${money(d.sale)} ליח׳`);
     notify(`עבודה חריגה אושרה ותיכלל בחשבון: ${d.item} (${P(pid)?.name})`, {roles:["engineer"], module:"billing"}); }
   if (d.cost > d.sale && !confirm("העלות גבוהה ממחיר המכירה — הסעיף הפסדי. להמשיך?")) return;
-  if (id){ const b = B(id); audit("עדכון סעיף כתב כמויות", `${d.item}: כמות ${b.qty}→${d.qty}, מחיר ${b.sale}→${d.sale}`); Object.assign(b, d); }
-  else { DB.boq.push({id:nid(), projectId:pid, ...d}); audit("סעיף חדש בכתב כמויות", `${P(pid)?.name}: ${d.item}`); }
+  let saved;
+  if (id){ const b = B(id); audit("עדכון סעיף כתב כמויות", `${d.item}: כמות ${b.qty}→${d.qty}, מחיר ${b.sale}→${d.sale}${b.sub!==d.sub?`, קבלן ${b.sub??"-"}→${d.sub??"-"}`:""}`); Object.assign(b, d); saved = b; }
+  else { saved = {id:nid(), projectId:pid, ...d}; DB.boq.push(saved); audit("סעיף חדש בכתב כמויות", `${P(pid)?.name}: ${d.item}`); }
+  if (pjc && d.sub != null) cpriceSet(pjc, saved, d.sub);
   closeModal(); refresh(); toast("נשמר");
 }
 function delBoqLine(id){ if (!guard("editBoq") || !confirm("למחוק את הסעיף?")) return; const b = B(id); DB.boq = DB.boq.filter(x => x.id!==id); audit("מחיקת סעיף", b.item); closeModal(); refresh(); }
@@ -592,9 +698,10 @@ function delBoqLine(id){ if (!guard("editBoq") || !confirm("למחוק את הס
 function createBill(pid){
   if (!guard("billing")) return;
   if (DB.bills.some(b => b.projectId===pid && b.status==="טיוטה")) return toast("כבר קיימת טיוטה לפרויקט","danger");
-  const lines = billLinesFor(pid), total = lines.reduce((a,l)=>a+(l.cum-l.prevCum)*l.price,0);
-  if (!req(total > 0, "אין כמויות מאושרות חדשות לחיוב")) return;
-  const b = {id:nid(), projectId:pid, period:monthKey(), date:today(), lines, total, status:"טיוטה", createdBy:S.user.id};
+  const lines = billLinesFor(pid), gross = r2(lines.reduce((a,l)=>a+(l.cum-l.prevCum)*l.price,0));
+  if (!req(gross > 0, "אין כמויות מאושרות חדשות לחיוב")) return;
+  const p = P(pid), dp = +p?.discountPct||0, mp = +p?.mainPct||0, total = billNet(gross, dp, mp).net;
+  const b = {id:nid(), projectId:pid, period:monthKey(), date:today(), lines, gross, discountPct:dp, mainPct:mp, total, status:"טיוטה", createdBy:S.user.id};
   DB.bills.push(b); audit("הפקת טיוטת חשבון", `${P(pid)?.name}: ${money(total)}`); refresh(); viewBill(b.id); toast("טיוטת החשבון הופקה");
 }
 function billHTML(b){
@@ -602,7 +709,9 @@ function billHTML(b){
   return `<p>לכבוד: <b>${esc(p?.client)}</b> · פרויקט: <b>${esc(p?.name)}</b> · תקופה: ${b.period} · חשבון מס׳ ${b.id} · ${st(b.status)}</p>
   <table class="mini bill"><thead><tr><th>סעיף</th><th>יח׳</th><th>מצטבר קודם</th><th>מצטבר נוכחי</th><th>לתקופה</th><th>מחיר</th><th>סכום</th></tr></thead><tbody>
   ${b.lines.map(l=>`<tr><td>${esc(l.item)}</td><td>${esc(l.unit)}</td><td>${num(l.prevCum)}</td><td>${num(l.cum)}</td><td><b>${num(l.cum-l.prevCum)}</b></td><td>${money(l.price)}</td><td>${money((l.cum-l.prevCum)*l.price)}</td></tr>`).join("")}</tbody>
-  <tfoot><tr><td colspan="6">סה״כ לפני מע״מ</td><td>${money(b.total)}</td></tr><tr><td colspan="6">מע״מ 18%</td><td>${money(b.total*0.18)}</td></tr><tr><td colspan="6"><b>סה״כ לתשלום</b></td><td><b>${money(b.total*1.18)}</b></td></tr></tfoot></table>
+  <tfoot>${b.gross != null && (b.discountPct || b.mainPct) ? (() => { const x = billNet(b.gross, b.discountPct, b.mainPct); return `<tr><td colspan="6">סה״כ לפי מחירי כתב הכמויות</td><td>${money(b.gross)}</td></tr>`
+    + (b.discountPct ? `<tr><td colspan="6">הנחת חוזה ${num(b.discountPct)}%</td><td>-${money(x.disc)}</td></tr>` : "")
+    + (b.mainPct ? `<tr><td colspan="6">רווח קבלן ראשי ${num(b.mainPct)}%</td><td>-${money(x.main)}</td></tr>` : ""); })() : ""}<tr><td colspan="6">סה״כ לפני מע״מ</td><td>${money(b.total)}</td></tr><tr><td colspan="6">מע״מ 18%</td><td>${money(b.total*0.18)}</td></tr><tr><td colspan="6"><b>סה״כ לתשלום</b></td><td><b>${money(b.total*1.18)}</b></td></tr></tfoot></table>
   <p class="muted">החשבון כולל רק כמויות שאושרו ע״י מהנדס ביומני העבודה.</p>`;
 }
 function viewBill(id){
@@ -781,7 +890,7 @@ function resetDemo(){ if (CLOUD.enabled) return; if (!guard("admin") || !confirm
 /* ------------------------------ חשבונות קבלני משנה ------------------------------ */
 function subHTML(uid, per){
   const u = U(uid), lines = subStatementLines(uid, per), total = lines.reduce((a,l)=>a+l.total,0);
-  const pend = DB.reports.filter(r => r.userId===+uid && r.status==="pending");
+  const pend = ownerReports(uid).filter(r => r.status==="pending");
   const sb = (DB.subbills||[]).find(s => s.userId===+uid && s.period===per);
   return `<p>${ROLES[u?.role]||""}: <b>${esc(u?.name)}</b>${u?.phone?` · ${esc(u.phone)}`:""} · חודש: <b>${per}</b>${sb?` · ${st(sb.status)}`:""}</p>
   <table class="mini bill"><thead><tr><th>פרויקט</th><th>סעיף</th><th>יח׳</th><th>כמות מאושרת</th><th>מחיר ליח׳</th><th>סכום</th></tr></thead><tbody>
@@ -791,11 +900,11 @@ function subHTML(uid, per){
   <p class="muted">כולל רק עבודות שאושרו ע״י מהנדס. עבודות חריגות מסומנות ומשולמות לפי המחיר שנקבע לקבלן.</p>`;
 }
 function subDaysHTML(uid, per){
-  const reps = DB.reports.filter(r => r.userId===+uid && r.date.slice(0,7)===per).sort((a,b)=>a.date.localeCompare(b.date) || a.id-b.id);
+  const reps = ownerReports(uid, per).sort((a,b)=>a.date.localeCompare(b.date) || a.id-b.id);
   if (!reps.length) return "";
   const RS = {approved:"מאושר", pending:"ממתין", rejected:"נדחה"};
   return `<h3>פירוט יומי</h3><div class="table-wrap"><table class="mini"><thead><tr><th>תאריך</th><th>פרויקט</th><th>סעיף</th><th>כמות</th><th>📷</th><th>📍</th><th>סטטוס</th><th>סכום</th></tr></thead><tbody>
-   ${reps.map(r => { const b = B(r.boqId); return `<tr class="${r.status==="rejected"?"muted":""}"><td>${fmtDate(r.date)}</td><td>${pname(r.projectId)}</td><td>${esc(b?.item||"-")}${b?.extra?" "+tag("חריג","danger"):""}</td><td>${num(r.qty)}${r.qtyReported!==r.qty?` <small class="muted">(דווח ${num(r.qtyReported)})</small>`:""}</td><td>${r.photo?"✓":"✗"}</td><td>${r.gps?"✓":"✗"}</td><td>${RS[r.status]}</td><td>${r.status==="rejected"?"-":money(reportValue(r))}</td></tr>`; }).join("")}</tbody></table></div>`;
+   ${reps.map(r => { const b = B(r.boqId); return `<tr class="${r.status==="rejected"?"muted":""}"><td>${fmtDate(r.date)}</td><td>${pname(r.projectId)}${r.userId!==+uid?`<br><small class="muted">דיווח: ${uname(r.userId)}</small>`:""}</td><td>${esc(b?.item||"-")}${b?.extra?" "+tag("חריג","danger"):""}</td><td>${num(r.qty)}${r.qtyReported!==r.qty?` <small class="muted">(דווח ${num(r.qtyReported)})</small>`:""}</td><td>${r.photo?"✓":"✗"}</td><td>${r.gps?"✓":"✗"}</td><td>${RS[r.status]}</td><td>${r.status==="rejected"?"-":money(reportValue(r))}</td></tr>`; }).join("")}</tbody></table></div>`;
 }
 function viewSub(uid, per){
   if (S.user.id !== +uid && !can("billing")) return toast("אין לך הרשאה","danger");
@@ -814,7 +923,7 @@ function approveSub(uid, per){
   if (!guard("billing")) return;
   const lines = subStatementLines(uid, per), total = Math.round(lines.reduce((a,l)=>a+l.total,0)*100)/100;
   if (!req(total > 0, "אין עבודות מאושרות לחודש זה")) return;
-  const pend = DB.reports.filter(r => r.userId===+uid && r.status==="pending" && r.date.slice(0,7)===per).length;
+  const pend = ownerReports(uid, per).filter(r => r.status==="pending").length;
   if (pend && !confirm(`יש עוד ${pend} דיווחים של ${U(uid)?.name} מחודש זה שממתינים לאישור — הם לא ייכללו. להמשיך?`)) return;
   DB.subbills = DB.subbills || [];
   let sb = DB.subbills.find(s => s.userId===+uid && s.period===per);
@@ -930,7 +1039,7 @@ function init(){
     afterAuth().catch(e => authMsg("שגיאה: " + e.message, true));
     return;
   }
-  load(); Object.assign(MATERIALS, DB.customMaterials || {}); if (!DB.subbills) DB.subbills = [];
+  load(); Object.assign(MATERIALS, DB.customMaterials || {}); if (!DB.subbills) DB.subbills = []; if (!DB.cprices) DB.cprices = [];
   renderLogin();
   $("pinInput").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
   window.addEventListener("storage", e => { if (e.key === DB_KEY && S.user){ load(); S.user = U(S.user.id) || S.user; render(); } }); // סנכרון בין לשוניות

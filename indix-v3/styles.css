@@ -208,3 +208,18 @@ h4{margin:14px 0 6px}
 .earn{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .earn .num{font-size:24px}
 .success-text{color:#15803d}
+
+/* V3.6 — כתב כמויות רחב: עמודת הסעיף לא נמעכת */
+@media (min-width: 761px){ #boqT td:first-child{min-width:230px} #boqT td, #boqT th{white-space:nowrap} #boqT td:first-child{white-space:normal} }
+@media (max-width: 760px){
+  #pfT thead{display:none}
+  #pfT tbody tr{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 6px;border-bottom:1px solid #e2e8f0}
+  #pfT tbody td{border:0;padding:0}
+  #pfT tbody td:first-child{grid-column:1/-1;font-weight:700}
+  #pfT tbody td[data-l]::before{content:attr(data-l);display:block;font-size:11px;color:#64748b}
+  #pfT .pf_hm{display:none}
+  #pfT .pf_in{width:100%!important;font-size:16px}
+  #pfT tfoot tr{display:grid;grid-template-columns:1fr 1fr 1fr}
+  #pfT tfoot td{border:0}
+  #pfT tfoot td:nth-child(3){display:none}
+}
